@@ -125,8 +125,8 @@
             class="bg-white/15 hover:bg-white/25 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition cursor-pointer"
             title="Cihazlar Arası Ortak Bulut Senkronizasyonu ve Yedekleme"
           >
-            <span id="cloudDot" class="w-2 h-2 rounded-full bg-emerald-300"></span>
-            <span id="cloudStatusText" class="hidden md:inline">Cihaz Hafızası Aktif</span>
+            <span id="cloudDot" class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+            <span id="cloudStatusText" class="hidden md:inline">Ortak Bulut Aktif</span>
           </button>
 
           <button
@@ -539,7 +539,8 @@
           <input
             type="url"
             id="firebaseDbUrlInput"
-            placeholder="https://perde-takip-default-rtdb.firebaseio.com"
+            value="https://perde-takip-de5c8-default-rtdb.firebaseio.com"
+            placeholder="https://perde-takip-de5c8-default-rtdb.firebaseio.com"
             class="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#52735f]"
           />
           <div class="flex justify-end gap-2">
@@ -572,6 +573,7 @@
 
     const LOCAL_STORAGE_KEY = 'perde_crm_kalici_siparisler_v1';
     const CLOUD_URL_KEY = 'perde_crm_firebase_rtdb_url';
+    const DEFAULT_CLOUD_URL = 'https://perde-takip-de5c8-default-rtdb.firebaseio.com';
 
     // State
     let orders = [];
@@ -583,7 +585,7 @@
     let db = null;
     let auth = null;
     let currentUser = null;
-    let customCloudUrl = localStorage.getItem(CLOUD_URL_KEY) || '';
+    let customCloudUrl = localStorage.getItem(CLOUD_URL_KEY) || DEFAULT_CLOUD_URL;
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'perde-siparis-takip-crm';
 
     // 1. Cihazın Kalıcı Hafızasından (localStorage) Yükle & Kaydet
@@ -594,11 +596,10 @@
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
             orders = parsed;
-            orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           }
         }
       } catch (e) {
-        console.error("Yerel hafıza okuma hatası:", e);
+        console.error('Local storage okuma hatası:', e);
       }
     }
 
@@ -606,119 +607,96 @@
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(orders));
       } catch (e) {
-        console.error("Yerel hafıza yazma hatası:", e);
+        console.error('Local storage kaydetme hatası:', e);
       }
     }
 
-    // 2. Özel Bulut URL (Firebase RTDB REST) Senkronizasyonu
-    async function syncFromCustomCloud() {
+    // 2. Özel Firebase Realtime Database (REST API) Senkronizasyonu
+    async function fetchFromCustomCloud() {
       if (!customCloudUrl) return;
+      const cleanUrl = customCloudUrl.replace(/\/$/, '');
       try {
-        const cleanUrl = customCloudUrl.replace(/\/$/, '');
-        const res = await fetch(`${cleanUrl}/orders.json`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && typeof data === 'object') {
-            orders = Object.values(data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-            saveToLocalStorage();
-            renderAll();
-          } else if (data === null) {
-            orders = [];
-            saveToLocalStorage();
-            renderAll();
-          }
-          updateCloudBadge(true);
+        const res = await fetch(`${cleanUrl}/curtain_orders.json`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          const list = Object.keys(data).map((key) => ({
+            ...data[key],
+            id: key
+          }));
+          list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          orders = list;
+          saveToLocalStorage();
+          renderAll();
+        } else if (data === null) {
+          orders = [];
+          saveToLocalStorage();
+          renderAll();
         }
-      } catch (e) {
-        console.error("Bulut senkronizasyon hatası:", e);
+        updateCloudStatusIndicator(true);
+      } catch (err) {
+        console.warn('Bulut senkronizasyon uyarısı:', err);
+        updateCloudStatusIndicator(false);
       }
     }
 
-    async function pushToCustomCloud() {
-      saveToLocalStorage();
+    async function pushOrderToCustomCloud(orderObj) {
       if (!customCloudUrl) return;
+      const cleanUrl = customCloudUrl.replace(/\/$/, '');
       try {
-        const cleanUrl = customCloudUrl.replace(/\/$/, '');
-        const mapObj = {};
-        orders.forEach((o) => {
-          mapObj[o.id] = o;
-        });
-        await fetch(`${cleanUrl}/orders.json`, {
+        await fetch(`${cleanUrl}/curtain_orders/${orderObj.id}.json`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(mapObj)
+          body: JSON.stringify(orderObj)
         });
-        updateCloudBadge(true);
-      } catch (e) {
-        console.error("Bulut yazma hatası:", e);
+      } catch (err) {
+        console.warn('Buluta yazma hatası:', err);
       }
     }
 
-    function updateCloudBadge(isCloudConnected) {
-      const txt = document.getElementById('cloudStatusText');
-      const dot = document.getElementById('cloudDot');
-      if (isCloudConnected) {
-        txt.textContent = 'Ortak Bulut Aktif';
-        dot.className = 'w-2 h-2 rounded-full bg-emerald-300 animate-pulse';
-      } else {
-        txt.textContent = 'Cihaz Hafızası Aktif';
-        dot.className = 'w-2 h-2 rounded-full bg-amber-300';
-      }
-    }
-
-    // 3. Başlatma (Önce Yerel Hafıza, Varsa Bulut)
-    async function initStorage() {
-      loadFromLocalStorage();
-      renderAll();
-
-      if (customCloudUrl) {
-        await syncFromCustomCloud();
-        setInterval(syncFromCustomCloud, 8000);
-        return;
-      }
-
+    async function deleteOrderFromCustomCloud(orderId) {
+      if (!customCloudUrl) return;
+      const cleanUrl = customCloudUrl.replace(/\/$/, '');
       try {
-        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-          const firebaseConfig = JSON.parse(__firebase_config);
-          const app = initializeApp(firebaseConfig);
-          auth = getAuth(app);
-          db = getFirestore(app);
-
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-
-          onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user) {
-              const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'curtain_orders');
-              onSnapshot(
-                ordersCol,
-                (snapshot) => {
-                  orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-                  orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-                  saveToLocalStorage();
-                  renderAll();
-                },
-                (err) => {
-                  console.error("Veri okuma hatası:", err);
-                  renderAll();
-                }
-              );
-            }
-          });
-        }
-      } catch (e) {
-        console.error("Başlatma hatası:", e);
+        await fetch(`${cleanUrl}/curtain_orders/${orderId}.json`, {
+          method: 'DELETE'
+        });
+      } catch (err) {
+        console.warn('Buluttan silme hatası:', err);
       }
     }
 
-    // Yardımcı Fonksiyonlar
+    async function clearAllFromCustomCloud() {
+      if (!customCloudUrl) return;
+      const cleanUrl = customCloudUrl.replace(/\/$/, '');
+      try {
+        await fetch(`${cleanUrl}/curtain_orders.json`, {
+          method: 'DELETE'
+        });
+      } catch (err) {
+        console.warn('Bulut sıfırlama hatası:', err);
+      }
+    }
+
+    function updateCloudStatusIndicator(isCloudActive) {
+      const dot = document.getElementById('cloudDot');
+      const text = document.getElementById('cloudStatusText');
+      if (!dot || !text) return;
+      if (isCloudActive && customCloudUrl) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-300 animate-pulse';
+        text.textContent = 'Ortak Bulut Aktif';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-300';
+        text.textContent = 'Cihaz Hafızası Aktif';
+      }
+    }
+
+    // Bildirim Gösterimi
     function showToast(msg) {
       const toast = document.getElementById('toast');
-      document.getElementById('toastText').textContent = msg;
+      const toastText = document.getElementById('toastText');
+      if (!toast || !toastText) return;
+      toastText.textContent = msg;
       toast.classList.remove('hidden');
       toast.classList.add('flex');
       setTimeout(() => {
@@ -727,6 +705,7 @@
       }, 3200);
     }
 
+    // Yardımcı Formatlayıcılar
     function formatDateTR(dateStr) {
       if (!dateStr) return '-';
       if (dateStr.includes('.')) return dateStr;
@@ -741,46 +720,50 @@
     }
 
     function getStatusStyle(statusId) {
-      return ORDER_STATUSES.find((s) => s.id === statusId) || ORDER_STATUSES[0];
+      return (
+        ORDER_STATUSES.find((s) => s.id === statusId) || {
+          id: statusId,
+          label: statusId,
+          bg: 'bg-slate-100 text-slate-700 border-slate-200',
+          dot: 'bg-slate-500'
+        }
+      );
     }
 
-    // Filtrelenmiş Liste
+    // Filtrelenmiş Siparişleri Getir
     function getFilteredOrders() {
       const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
-      return orders.filter((o) => {
+      return orders.filter((order) => {
         const matchesSearch =
           !q ||
-          (o.fullName && o.fullName.toLowerCase().includes(q)) ||
-          (o.phone && o.phone.toLowerCase().includes(q)) ||
-          (o.address && o.address.toLowerCase().includes(q));
-        const matchesStatus = currentStatusFilter === 'Tümü' || o.status === currentStatusFilter;
+          (order.fullName && order.fullName.toLowerCase().includes(q)) ||
+          (order.phone && order.phone.toLowerCase().includes(q)) ||
+          (order.address && order.address.toLowerCase().includes(q));
+        const matchesStatus = currentStatusFilter === 'Tümü' || order.status === currentStatusFilter;
         return matchesSearch && matchesStatus;
       });
     }
 
-    // Tüm Arayüzü Yenile
+    // Ana Render Fonksiyonu
     function renderAll() {
       renderStats();
       renderStatusPills();
-      renderTableAndCards();
-      lucide.createIcons();
+      renderOrdersList();
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
     }
 
-    // 1. Üst Özet Kartları (Toplam Alınan Para dahil)
     function renderStats() {
       const totalCustomers = orders.length;
       const activeOrders = orders.filter((o) => o.status !== 'Teslim Edildi').length;
-      let totalRevenue = 0;
-      let totalCollected = 0;
-      let totalReceivable = 0;
-
-      orders.forEach((o) => {
-        const total = Number(o.totalAmount) || 0;
-        const dep = Number(o.depositAmount) || 0;
-        totalRevenue += total;
-        totalCollected += dep;
-        totalReceivable += Math.max(0, total - dep);
-      });
+      const totalRevenue = orders.reduce((acc, o) => acc + (Number(o.totalAmount) || 0), 0);
+      const totalCollected = orders.reduce((acc, o) => acc + (Number(o.depositAmount) || 0), 0);
+      const totalReceivable = orders.reduce((acc, o) => {
+        const t = Number(o.totalAmount) || 0;
+        const d = Number(o.depositAmount) || 0;
+        return acc + Math.max(0, t - d);
+      }, 0);
 
       document.getElementById('statTotalCustomers').textContent = totalCustomers;
       document.getElementById('statActiveOrders').textContent = activeOrders;
@@ -788,20 +771,22 @@
       document.getElementById('statTotalCollected').textContent = formatCurrency(totalCollected);
       document.getElementById('statTotalReceivable').textContent = formatCurrency(totalReceivable);
 
-      const clearBtn = document.getElementById('btnClearAll');
-      if (orders.length > 0) {
-        clearBtn.classList.remove('hidden');
-        clearBtn.classList.add('flex');
-      } else {
-        clearBtn.classList.add('hidden');
-        clearBtn.classList.remove('flex');
+      const btnClearAll = document.getElementById('btnClearAll');
+      if (btnClearAll) {
+        if (orders.length > 0) {
+          btnClearAll.classList.remove('hidden');
+          btnClearAll.classList.add('flex');
+        } else {
+          btnClearAll.classList.add('hidden');
+          btnClearAll.classList.remove('flex');
+        }
       }
-      document.getElementById('btnExportCSV').disabled = orders.length === 0;
     }
 
-    // 2. Durum Filtre Butonları
     function renderStatusPills() {
       const container = document.getElementById('statusPillsContainer');
+      if (!container) return;
+
       const allActive = currentStatusFilter === 'Tümü';
       let html = `
         <button onclick="setStatusFilter('Tümü')" class="px-3 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer ${
@@ -828,8 +813,7 @@
       container.innerHTML = html;
     }
 
-    // 3. Masaüstü Tablo ve Mobil Kartlar
-    function renderTableAndCards() {
+    function renderOrdersList() {
       const filtered = getFilteredOrders();
       const itemsPerPage = Number(document.getElementById('itemsPerPageSelect')?.value || 10);
       const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
@@ -842,30 +826,23 @@
       const mobileContainer = document.getElementById('mobileCardsContainer');
 
       if (paginated.length === 0) {
-        const emptyMsg = orders.length === 0
-          ? 'Henüz kayıtlı müşteri veya sipariş bulunmuyor.'
-          : 'Aradığınız kriterlere uygun müşteri kaydı bulunamadı.';
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="8" class="py-14 px-4 text-center">
-              <div class="max-w-md mx-auto space-y-3">
-                <p class="text-slate-700 font-semibold text-base">${emptyMsg}</p>
-                ${
-                  orders.length === 0
-                    ? `<button onclick="openNewOrderModal()" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#52735f] hover:bg-[#415c4c] text-white text-xs font-bold cursor-pointer">
-                        <span>+ İlk Müşteriyi Ekle</span>
-                      </button>`
-                    : ''
-                }
-              </div>
-            </td>
-          </tr>
-        `;
-        mobileContainer.innerHTML = `
-          <div class="p-8 text-center space-y-3">
-            <p class="text-slate-700 font-semibold text-sm">${emptyMsg}</p>
+        const emptyHtml = `
+          <div class="py-12 px-4 text-center max-w-md mx-auto space-y-3">
+            <p class="text-slate-700 font-semibold text-base">
+              ${orders.length === 0 ? 'Henüz kayıtlı müşteri veya sipariş bulunmuyor.' : 'Aradığınız kriterlere uygun müşteri bulunamadı.'}
+            </p>
+            <p class="text-xs text-slate-500">
+              ${orders.length === 0 ? '"+ Yeni Sipariş Ekle" butonuna tıklayarak ilk müşterinizi hemen kaydedebilirsiniz.' : 'Arama metnini veya durum filtresini değiştirin.'}
+            </p>
+            ${
+              orders.length === 0
+                ? `<button onclick="openNewOrderModal()" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#52735f] hover:bg-[#415c4c] text-white text-xs font-bold shadow-xs cursor-pointer">+ İlk Müşteriyi Ekle</button>`
+                : ''
+            }
           </div>
         `;
+        tbody.innerHTML = `<tr><td colspan="8">${emptyHtml}</td></tr>`;
+        mobileContainer.innerHTML = emptyHtml;
       } else {
         tbody.innerHTML = paginated
           .map((order) => {
@@ -873,17 +850,18 @@
             const total = Number(order.totalAmount) || 0;
             const dep = Number(order.depositAmount) || 0;
             const rem = Math.max(0, total - dep);
-            const itemCount = order.items ? order.items.length : 0;
+
+            const statusOptions = ORDER_STATUSES.map(
+              (s) => `<option value="${s.id}" ${order.status === s.id ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
+            ).join('');
 
             return `
               <tr class="hover:bg-slate-50/90 transition">
                 <td class="py-3.5 px-4 font-medium text-slate-900">
                   <div>${order.fullName || '-'}</div>
                   ${
-                    itemCount > 0
-                      ? `<span class="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-                          ${itemCount} Kalem Ölçü
-                        </span>`
+                    order.items && order.items.length > 0
+                      ? `<span class="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">${order.items.length} Kalem Ölçü</span>`
                       : ''
                   }
                 </td>
@@ -892,27 +870,21 @@
                 <td class="py-3.5 px-4 text-slate-700 whitespace-nowrap">${formatDateTR(order.deliveryDate)}</td>
                 <td class="py-3.5 px-4 whitespace-nowrap">
                   <select onchange="quickStatusChange('${order.id}', this.value)" class="px-3 py-1 rounded-full text-xs font-semibold border cursor-pointer focus:outline-none ${stStyle.bg}">
-                    ${ORDER_STATUSES.map(
-                      (s) => `<option value="${s.id}" ${s.id === order.status ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
-                    ).join('')}
+                    ${statusOptions}
                   </select>
                 </td>
                 <td class="py-3.5 px-4 whitespace-nowrap">
                   ${
                     total > 0 || dep > 0
-                      ? `<div class="space-y-0.5 text-xs">
+                      ? `<div class="text-xs space-y-0.5">
                           <div class="font-semibold text-slate-800">Top: ${formatCurrency(total)}</div>
-                          <div class="text-emerald-600 font-medium">Alınan: ${formatCurrency(dep)}</div>
-                          <div class="font-bold ${rem > 0 ? 'text-rose-600' : 'text-emerald-600'}">
-                            ${rem > 0 ? `Kalan: ${formatCurrency(rem)}` : 'Tamamı Ödendi'}
-                          </div>
+                          <div class="text-emerald-700 font-medium">Alınan: ${formatCurrency(dep)}</div>
+                          <div class="font-bold ${rem > 0 ? 'text-rose-600' : 'text-emerald-600'}">${rem > 0 ? 'Kalan: ' + formatCurrency(rem) : 'Tamamı Ödendi'}</div>
                         </div>`
                       : '<span class="text-xs text-slate-400">-</span>'
                   }
                 </td>
-                <td class="py-3.5 px-4 text-slate-700 max-w-xs truncate" title="${order.address || ''}">
-                  ${order.address || '-'}
-                </td>
+                <td class="py-3.5 px-4 text-slate-700 max-w-xs truncate" title="${order.address || ''}">${order.address || '-'}</td>
                 <td class="py-3.5 px-4 text-right whitespace-nowrap">
                   <div class="inline-flex items-center gap-1">
                     <button onclick="openWhatsApp('${order.id}')" title="WhatsApp ile Bilgilendir" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer">
@@ -940,7 +912,9 @@
             const total = Number(order.totalAmount) || 0;
             const dep = Number(order.depositAmount) || 0;
             const rem = Math.max(0, total - dep);
-            const itemCount = order.items ? order.items.length : 0;
+            const statusOptions = ORDER_STATUSES.map(
+              (s) => `<option value="${s.id}" ${order.status === s.id ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
+            ).join('');
 
             return `
               <div class="p-4 space-y-3 bg-white">
@@ -952,43 +926,39 @@
                     </a>
                   </div>
                   <select onchange="quickStatusChange('${order.id}', this.value)" class="px-2.5 py-1 rounded-full text-xs font-semibold border ${stStyle.bg}">
-                    ${ORDER_STATUSES.map(
-                      (s) => `<option value="${s.id}" ${s.id === order.status ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
-                    ).join('')}
+                    ${statusOptions}
                   </select>
                 </div>
 
-                <div class="grid grid-cols-3 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                   <div>
-                    <span class="text-slate-400 block">Toplam:</span>
-                    <span class="font-semibold text-slate-800">${formatCurrency(total)}</span>
+                    <span class="text-slate-400 block">Sipariş Tarihi:</span>
+                    <span class="font-medium text-slate-700">${formatDateTR(order.orderDate)}</span>
                   </div>
                   <div>
-                    <span class="text-slate-400 block">Alınan:</span>
-                    <span class="font-semibold text-emerald-600">${formatCurrency(dep)}</span>
+                    <span class="text-slate-400 block">Teslimat Tarihi:</span>
+                    <span class="font-medium text-slate-700">${formatDateTR(order.deliveryDate)}</span>
                   </div>
                   <div>
-                    <span class="text-slate-400 block">Kalan:</span>
+                    <span class="text-slate-400 block">Toplam / Alınan:</span>
+                    <span class="font-semibold text-slate-800">${formatCurrency(total)} / <span class="text-emerald-700">${formatCurrency(dep)}</span></span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block">Kalan Bakiye:</span>
                     <span class="font-bold ${rem > 0 ? 'text-rose-600' : 'text-emerald-600'}">${rem > 0 ? formatCurrency(rem) : 'Ödendi'}</span>
                   </div>
                 </div>
 
+                ${order.address ? `<p class="text-xs text-slate-600">${order.address}</p>` : ''}
+
                 <div class="flex items-center justify-between pt-2 border-t border-slate-100">
                   <div class="flex items-center gap-1.5">
-                    <button onclick="openWhatsApp('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold flex items-center gap-1">
-                      <span>WhatsApp</span>
-                    </button>
-                    <button onclick="openViewOrderModal('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
-                      <span>Ölçüler (${itemCount})</span>
-                    </button>
+                    <button onclick="openWhatsApp('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">WhatsApp</button>
+                    <button onclick="openViewOrderModal('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold">Ölçüler (${order.items?.length || 0})</button>
                   </div>
                   <div class="flex items-center gap-1">
-                    <button onclick="openEditOrderModal('${order.id}')" class="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50">
-                      <i data-lucide="edit-3" class="w-4 h-4"></i>
-                    </button>
-                    <button onclick="openDeleteModal('${order.id}')" class="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50">
-                      <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    </button>
+                    <button onclick="openEditOrderModal('${order.id}')" class="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                    <button onclick="openDeleteModal('${order.id}')" class="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                   </div>
                 </div>
               </div>
@@ -997,7 +967,7 @@
           .join('');
       }
 
-      // Alt Sayfalama Bilgisi
+      // Alt Sayfalama
       const countText = document.getElementById('paginationCountText');
       if (filtered.length > 0) {
         countText.textContent = `${start + 1}-${Math.min(start + itemsPerPage, filtered.length)} / ${filtered.length} müşteri`;
@@ -1008,70 +978,70 @@
       const controls = document.getElementById('paginationControls');
       if (totalPages > 1) {
         controls.innerHTML = `
-          <button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-100 cursor-pointer">Önceki</button>
+          <button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 cursor-pointer">Önceki</button>
           <span class="px-2 font-semibold">Sayfa ${currentPage} / ${totalPages}</span>
-          <button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-100 cursor-pointer">Sonraki</button>
+          <button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 cursor-pointer">Sonraki</button>
         `;
       } else {
         controls.innerHTML = '';
       }
     }
 
-    // Ölçü Satırlarını Render Et
-    function renderMeasurementRows() {
+    // Oda / Ölçü Satırlarını Render Et
+    function renderMeasurementsForm() {
       const container = document.getElementById('measurementsContainer');
+      if (!container) return;
+
       container.innerHTML = currentItems
-        .map(
-          (item, idx) => `
-        <div class="grid grid-cols-2 sm:grid-cols-12 gap-2 bg-white p-3 rounded-xl border border-slate-200 items-end">
-          <div class="col-span-1 sm:col-span-2">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Oda</label>
-            <select onchange="updateItemField(${idx}, 'room', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
-              ${ROOM_TYPES.map((r) => `<option value="${r}" ${r === item.room ? 'selected' : ''}>${r}</option>`).join('')}
-            </select>
-          </div>
-          <div class="col-span-1 sm:col-span-2">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Perde Türü</label>
-            <select onchange="updateItemField(${idx}, 'type', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
-              ${CURTAIN_TYPES.map((c) => `<option value="${c}" ${c === item.type ? 'selected' : ''}>${c}</option>`).join('')}
-            </select>
-          </div>
-          <div class="col-span-1 sm:col-span-1">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">En (cm)</label>
-            <input type="number" placeholder="300" value="${item.width || ''}" oninput="updateItemField(${idx}, 'width', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
-          </div>
-          <div class="col-span-1 sm:col-span-1">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Boy (cm)</label>
-            <input type="number" placeholder="260" value="${item.height || ''}" oninput="updateItemField(${idx}, 'height', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
-          </div>
-          <div class="col-span-2 sm:col-span-2">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Pile / Mekanizma</label>
-            <select onchange="updateItemField(${idx}, 'pleat', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
-              ${PLEAT_TYPES.map((p) => `<option value="${p}" ${p === item.pleat ? 'selected' : ''}>${p}</option>`).join('')}
-            </select>
-          </div>
-          <div class="col-span-1 sm:col-span-2">
-            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Tutar (₺)</label>
-            <input type="number" placeholder="0" value="${item.price || ''}" oninput="updateItemField(${idx}, 'price', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
-          </div>
-          <div class="col-span-1 sm:col-span-2 flex items-center gap-1">
-            <div class="flex-1">
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Kumaş/Not</label>
-              <input type="text" placeholder="Krem keten" value="${item.note || ''}" oninput="updateItemField(${idx}, 'note', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+        .map((item, idx) => {
+          const roomOpts = ROOM_TYPES.map((r) => `<option value="${r}" ${item.room === r ? 'selected' : ''}>${r}</option>`).join('');
+          const typeOpts = CURTAIN_TYPES.map((c) => `<option value="${c}" ${item.type === c ? 'selected' : ''}>${c}</option>`).join('');
+          const pleatOpts = PLEAT_TYPES.map((p) => `<option value="${p}" ${item.pleat === p ? 'selected' : ''}>${p}</option>`).join('');
+
+          return `
+            <div class="grid grid-cols-2 sm:grid-cols-12 gap-2 bg-white p-3 rounded-xl border border-slate-200 items-end">
+              <div class="col-span-1 sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Oda</label>
+                <select onchange="updateMeasurementItem(${idx}, 'room', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">${roomOpts}</select>
+              </div>
+              <div class="col-span-1 sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Perde Türü</label>
+                <select onchange="updateMeasurementItem(${idx}, 'type', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">${typeOpts}</select>
+              </div>
+              <div class="col-span-1 sm:col-span-1">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">En (cm)</label>
+                <input type="number" placeholder="300" value="${item.width || ''}" oninput="updateMeasurementItem(${idx}, 'width', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+              </div>
+              <div class="col-span-1 sm:col-span-1">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Boy (cm)</label>
+                <input type="number" placeholder="260" value="${item.height || ''}" oninput="updateMeasurementItem(${idx}, 'height', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+              </div>
+              <div class="col-span-2 sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Pile / Mekanizma</label>
+                <select onchange="updateMeasurementItem(${idx}, 'pleat', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">${pleatOpts}</select>
+              </div>
+              <div class="col-span-1 sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Tutar (₺)</label>
+                <input type="number" placeholder="0" value="${item.price || ''}" oninput="updateMeasurementItem(${idx}, 'price', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+              </div>
+              <div class="col-span-1 sm:col-span-2 flex items-center gap-1">
+                <div class="flex-1">
+                  <label class="block text-[11px] font-semibold text-slate-500 mb-1">Kumaş/Not</label>
+                  <input type="text" placeholder="Krem keten" value="${item.note || ''}" oninput="updateMeasurementItem(${idx}, 'note', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+                </div>
+                ${
+                  currentItems.length > 1
+                    ? `<button type="button" onclick="removeMeasurementRow(${idx})" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded mt-4 cursor-pointer">✕</button>`
+                    : ''
+                }
+              </div>
             </div>
-            ${
-              currentItems.length > 1
-                ? `<button type="button" onclick="removeMeasurementRow(${idx})" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded mt-4 cursor-pointer">✕</button>`
-                : ''
-            }
-          </div>
-        </div>
-      `
-        )
+          `;
+        })
         .join('');
     }
 
-    // Window Global Fonksiyonları
+    // Global Window Fonksiyonları (HTML butonlarından çağrılanlar)
     window.handleFilterChange = () => {
       currentPage = 1;
       renderAll();
@@ -1085,46 +1055,16 @@
 
     window.setStatusFilter = (val) => {
       currentStatusFilter = val;
-      document.getElementById('statusSelect').value = val;
+      const select = document.getElementById('statusSelect');
+      if (select) select.value = val;
       currentPage = 1;
       renderAll();
     };
 
     window.changePage = (p) => {
       currentPage = p;
-      renderAll();
+      renderOrdersList();
     };
-
-    window.updateRemainingDisplay = () => {
-      const total = Number(document.getElementById('fieldTotalAmount').value) || 0;
-      const dep = Number(document.getElementById('fieldDepositAmount').value) || 0;
-      const rem = Math.max(0, total - dep);
-      document.getElementById('fieldRemainingDisplay').textContent = formatCurrency(rem);
-    };
-
-    window.addMeasurementRow = () => {
-      currentItems.push({ room: 'Oturma Odası', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' });
-      renderMeasurementRows();
-    };
-
-    window.removeMeasurementRow = (idx) => {
-      currentItems.splice(idx, 1);
-      renderMeasurementRows();
-      recalcTotalFromItems();
-    };
-
-    window.updateItemField = (idx, field, val) => {
-      currentItems[idx][field] = val;
-      if (field === 'price') recalcTotalFromItems();
-    };
-
-    function recalcTotalFromItems() {
-      const sum = currentItems.reduce((acc, it) => acc + (Number(it.price) || 0), 0);
-      if (sum > 0) {
-        document.getElementById('fieldTotalAmount').value = sum;
-        window.updateRemainingDisplay();
-      }
-    }
 
     window.openNewOrderModal = () => {
       editingOrderId = null;
@@ -1139,10 +1079,9 @@
       document.getElementById('fieldTotalAmount').value = '';
       document.getElementById('fieldDepositAmount').value = '';
       document.getElementById('fieldNotes').value = '';
-      currentItems = [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' }];
-      renderMeasurementRows();
+      currentItems = [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', quantity: 1, price: '', note: '' }];
+      renderMeasurementsForm();
       window.updateRemainingDisplay();
-
       const modal = document.getElementById('orderFormModal');
       modal.classList.remove('hidden');
       modal.classList.add('flex');
@@ -1163,12 +1102,12 @@
       document.getElementById('fieldTotalAmount').value = ord.totalAmount || '';
       document.getElementById('fieldDepositAmount').value = ord.depositAmount || '';
       document.getElementById('fieldNotes').value = ord.notes || '';
-      currentItems = ord.items && ord.items.length > 0
-        ? JSON.parse(JSON.stringify(ord.items))
-        : [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' }];
-      renderMeasurementRows();
+      currentItems =
+        ord.items && ord.items.length > 0
+          ? JSON.parse(JSON.stringify(ord.items))
+          : [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', quantity: 1, price: '', note: '' }];
+      renderMeasurementsForm();
       window.updateRemainingDisplay();
-
       const modal = document.getElementById('orderFormModal');
       modal.classList.remove('hidden');
       modal.classList.add('flex');
@@ -1180,9 +1119,38 @@
       modal.classList.remove('flex');
     };
 
+    window.addMeasurementRow = () => {
+      currentItems.push({ room: 'Oturma Odası', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', quantity: 1, price: '', note: '' });
+      renderMeasurementsForm();
+    };
+
+    window.removeMeasurementRow = (idx) => {
+      currentItems.splice(idx, 1);
+      renderMeasurementsForm();
+    };
+
+    window.updateMeasurementItem = (idx, field, val) => {
+      currentItems[idx][field] = val;
+      if (field === 'price') {
+        const sum = currentItems.reduce((acc, it) => acc + (Number(it.price) || 0), 0);
+        if (sum > 0) {
+          document.getElementById('fieldTotalAmount').value = sum;
+          window.updateRemainingDisplay();
+        }
+      }
+    };
+
+    window.updateRemainingDisplay = () => {
+      const tot = Number(document.getElementById('fieldTotalAmount').value) || 0;
+      const dep = Number(document.getElementById('fieldDepositAmount').value) || 0;
+      const rem = Math.max(0, tot - dep);
+      document.getElementById('fieldRemainingDisplay').textContent = formatCurrency(rem);
+    };
+
     window.handleSaveOrder = async (e) => {
       e.preventDefault();
       const payload = {
+        id: editingOrderId || 'ord_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
         fullName: document.getElementById('fieldFullName').value.trim(),
         phone: document.getElementById('fieldPhone').value.trim(),
         status: document.getElementById('fieldStatus').value,
@@ -1196,94 +1164,62 @@
         updatedAt: Date.now()
       };
 
-      try {
-        if (db && currentUser && !customCloudUrl) {
-          if (editingOrderId) {
-            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', editingOrderId);
-            await updateDoc(ref, payload);
-            showToast('Müşteri bilgileri güncellendi.');
-          } else {
-            const col = collection(db, 'artifacts', appId, 'public', 'data', 'curtain_orders');
-            await addDoc(col, { ...payload, createdAt: Date.now() });
-            showToast('Yeni müşteri siparişi eklendi.');
-          }
-        } else {
-          if (editingOrderId) {
-            orders = orders.map((o) => (o.id === editingOrderId ? { ...o, ...payload } : o));
-          } else {
-            const newId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'ord_' + Date.now();
-            orders.unshift({ id: newId, ...payload, createdAt: Date.now() });
-          }
-          await pushToCustomCloud();
-          renderAll();
-          showToast('Sipariş kalıcı olarak kaydedildi.');
+      if (editingOrderId) {
+        const idx = orders.findIndex((o) => o.id === editingOrderId);
+        if (idx > -1) {
+          payload.createdAt = orders[idx].createdAt || Date.now();
+          orders[idx] = payload;
         }
-        window.closeOrderFormModal();
-      } catch (err) {
-        console.error(err);
-        showToast('Kaydedilirken bir hata oluştu.');
+      } else {
+        payload.createdAt = Date.now();
+        orders.unshift(payload);
       }
+
+      saveToLocalStorage();
+      window.closeOrderFormModal();
+      renderAll();
+      showToast(editingOrderId ? 'Müşteri bilgileri güncellendi.' : 'Yeni müşteri siparişi kaydedildi.');
+
+      await pushOrderToCustomCloud(payload);
     };
 
     window.quickStatusChange = async (id, newStatus) => {
-      try {
-        if (db && currentUser && !customCloudUrl) {
-          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', id);
-          await updateDoc(ref, { status: newStatus });
-        } else {
-          orders = orders.map((o) => (o.id === id ? { ...o, status: newStatus } : o));
-          await pushToCustomCloud();
-          renderAll();
-        }
-        showToast(`Sipariş durumu "${newStatus}" olarak güncellendi.`);
-      } catch (e) {
-        console.error(e);
-      }
+      const idx = orders.findIndex((o) => o.id === id);
+      if (idx === -1) return;
+      orders[idx].status = newStatus;
+      orders[idx].updatedAt = Date.now();
+      saveToLocalStorage();
+      renderAll();
+      showToast(`Sipariş durumu "${newStatus}" olarak güncellendi.`);
+      await pushOrderToCustomCloud(orders[idx]);
     };
 
     window.openViewOrderModal = (id) => {
       const ord = orders.find((o) => o.id === id);
       if (!ord) return;
+      document.getElementById('viewModalTitle').textContent = `${ord.fullName} — Sipariş & Ölçü Fişi`;
+      document.getElementById('viewModalSubtitle').textContent = `Durum: ${ord.status}`;
+
       const total = Number(ord.totalAmount) || 0;
       const dep = Number(ord.depositAmount) || 0;
       const rem = Math.max(0, total - dep);
 
-      document.getElementById('viewModalTitle').textContent = `${ord.fullName} — Sipariş & Ölçü Fişi`;
-      document.getElementById('viewModalSubtitle').textContent = `Durum: ${ord.status}`;
-
-      const itemsHtml =
+      const itemsRows =
         ord.items && ord.items.length > 0
-          ? `<div class="border border-slate-200 rounded-xl overflow-hidden">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-slate-100 text-slate-700">
-                  <tr>
-                    <th class="p-2.5">Oda</th>
-                    <th class="p-2.5">Perde Türü</th>
-                    <th class="p-2.5">En x Boy (cm)</th>
-                    <th class="p-2.5">Pile</th>
-                    <th class="p-2.5">Not / Kumaş</th>
-                    <th class="p-2.5 text-right">Tutar</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200">
-                  ${ord.items
-                    .map(
-                      (it) => `
-                    <tr>
-                      <td class="p-2.5 font-semibold">${it.room || '-'}</td>
-                      <td class="p-2.5">${it.type || '-'}</td>
-                      <td class="p-2.5 font-bold text-[#466353]">${it.width || '-'} x ${it.height || '-'} cm</td>
-                      <td class="p-2.5">${it.pleat || '-'}</td>
-                      <td class="p-2.5 text-slate-600">${it.note || '-'}</td>
-                      <td class="p-2.5 text-right font-semibold">${it.price ? formatCurrency(it.price) : '-'}</td>
-                    </tr>
-                  `
-                    )
-                    .join('')}
-                </tbody>
-              </table>
-            </div>`
-          : `<p class="text-xs text-slate-500 italic">Bu siparişe ait detaylı ölçü girilmemiş.</p>`;
+          ? ord.items
+              .map(
+                (it) => `
+              <tr>
+                <td class="p-2.5 font-semibold">${it.room || '-'}</td>
+                <td class="p-2.5">${it.type || '-'}</td>
+                <td class="p-2.5 font-bold text-[#466353]">${it.width || '-'} x ${it.height || '-'} cm</td>
+                <td class="p-2.5">${it.pleat || '-'}</td>
+                <td class="p-2.5 text-slate-600">${it.note || '-'}</td>
+                <td class="p-2.5 text-right font-semibold">${it.price ? formatCurrency(it.price) : '-'}</td>
+              </tr>`
+              )
+              .join('')
+          : `<tr><td colspan="6" class="p-3 text-center text-slate-400">Ölçü detayı girilmemiş.</td></tr>`;
 
       document.getElementById('viewModalBody').innerHTML = `
         <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -1303,14 +1239,27 @@
 
         <div>
           <h4 class="font-bold text-slate-800 mb-2">Alınan Perde Ölçüleri</h4>
-          ${itemsHtml}
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100 text-slate-700">
+                <tr>
+                  <th class="p-2.5">Oda</th>
+                  <th class="p-2.5">Perde Türü</th>
+                  <th class="p-2.5">En x Boy (cm)</th>
+                  <th class="p-2.5">Pile</th>
+                  <th class="p-2.5">Not / Kumaş</th>
+                  <th class="p-2.5 text-right">Tutar</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">${itemsRows}</tbody>
+            </table>
+          </div>
         </div>
 
         ${
           ord.notes
             ? `<div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
-                <span class="font-bold block mb-0.5">Atölye ve Montaj Notu:</span>
-                ${ord.notes}
+                <span class="font-bold block mb-0.5">Atölye ve Montaj Notu:</span>${ord.notes}
               </div>`
             : ''
         }
@@ -1318,13 +1267,12 @@
         <div class="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-200">
           <div class="space-y-0.5">
             <div class="text-xs text-slate-500">Toplam Tutar: <strong class="text-slate-800">${formatCurrency(total)}</strong></div>
-            <div class="text-xs text-slate-500">Alınan Para: <strong class="text-emerald-600">${formatCurrency(dep)}</strong></div>
+            <div class="text-xs text-slate-500">Alınan Para (Kapora): <strong class="text-emerald-600">${formatCurrency(dep)}</strong></div>
             <div class="text-sm font-bold text-rose-600">Kalan Bakiye: ${formatCurrency(rem)}</div>
           </div>
           <div class="flex items-center gap-2 no-print">
-            <button onclick="openWhatsApp('${ord.id}')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer">
-              WhatsApp Bilgi Gönder
-            </button>
+            <button onclick="openWhatsApp('${ord.id}')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer">WhatsApp Bilgi Gönder</button>
+            <button onclick="closeViewOrderModal(); openEditOrderModal('${ord.id}');" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer">Düzenle</button>
           </div>
         </div>
       `;
@@ -1359,20 +1307,13 @@
 
     window.confirmDeleteOrder = async () => {
       if (!deletingOrderId) return;
-      try {
-        if (db && currentUser && !customCloudUrl) {
-          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', deletingOrderId);
-          await deleteDoc(ref);
-        } else {
-          orders = orders.filter((o) => o.id !== deletingOrderId);
-          await pushToCustomCloud();
-          renderAll();
-        }
-        showToast('Müşteri kaydı silindi.');
-        window.closeDeleteModal();
-      } catch (e) {
-        console.error(e);
-      }
+      const idToRemove = deletingOrderId;
+      orders = orders.filter((o) => o.id !== idToRemove);
+      saveToLocalStorage();
+      window.closeDeleteModal();
+      renderAll();
+      showToast('Kayıt silindi.');
+      await deleteOrderFromCustomCloud(idToRemove);
     };
 
     window.openClearAllModal = () => {
@@ -1388,83 +1329,12 @@
     };
 
     window.confirmClearAllOrders = async () => {
-      try {
-        if (db && currentUser && !customCloudUrl) {
-          for (const ord of orders) {
-            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', ord.id);
-            await deleteDoc(ref);
-          }
-        } else {
-          orders = [];
-          await pushToCustomCloud();
-          renderAll();
-        }
-        window.closeClearAllModal();
-        showToast('Tüm kayıtlar temizlendi.');
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    // Bulut & Yedekleme Modal Fonksiyonları
-    window.openCloudModal = () => {
-      document.getElementById('firebaseDbUrlInput').value = customCloudUrl;
-      const modal = document.getElementById('cloudModal');
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-    };
-
-    window.closeCloudModal = () => {
-      const modal = document.getElementById('cloudModal');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    };
-
-    window.saveCloudConfig = async () => {
-      const val = document.getElementById('firebaseDbUrlInput').value.trim();
-      customCloudUrl = val;
-      if (val) {
-        localStorage.setItem(CLOUD_URL_KEY, val);
-        await pushToCustomCloud();
-        await syncFromCustomCloud();
-        showToast('Ortak bulut bağlantısı kaydedildi ve senkronize edildi.');
-      } else {
-        localStorage.removeItem(CLOUD_URL_KEY);
-        updateCloudBadge(false);
-        showToast('Cihaz hafızası moduna geçildi.');
-      }
-      window.closeCloudModal();
-    };
-
-    window.downloadBackupJSON = () => {
-      const dataStr = JSON.stringify(orders, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `Perde_CRM_Yedek_${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      showToast('Yedek dosyası indirildi.');
-    };
-
-    window.restoreBackupJSON = (event) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const imported = JSON.parse(e.target.result);
-          if (Array.isArray(imported)) {
-            orders = imported;
-            await pushToCustomCloud();
-            renderAll();
-            window.closeCloudModal();
-            showToast(`${imported.length} müşteri kaydı başarıyla yüklendi.`);
-          }
-        } catch (err) {
-          showToast('Geçersiz yedek dosyası.');
-        }
-      };
-      reader.readAsText(file);
+      orders = [];
+      saveToLocalStorage();
+      window.closeClearAllModal();
+      renderAll();
+      showToast('Tüm kayıtlar temizlendi.');
+      await clearAllFromCustomCloud();
     };
 
     window.openWhatsApp = (id) => {
@@ -1477,19 +1347,17 @@
         ? cleanPhone
         : '90' + cleanPhone;
 
-      const total = Number(ord.totalAmount) || 0;
-      const dep = Number(ord.depositAmount) || 0;
-      const remaining = Math.max(0, total - dep);
-
-      const message = `Merhaba Sayın *${ord.fullName}*,\n\nPerde siparişinizin güncel durumu: *${ord.status}*.\n${
+      const rem = Math.max(0, (Number(ord.totalAmount) || 0) - (Number(ord.depositAmount) || 0));
+      const msg = `Merhaba Sayın *${ord.fullName}*,\n\nPerde siparişinizin güncel durumu: *${ord.status}*.\n${
         ord.deliveryDate ? `Planlanan Teslimat Tarihi: *${formatDateTR(ord.deliveryDate)}*\n` : ''
-      }${remaining > 0 ? `Kalan Bakiye: *${formatCurrency(remaining)}*\n` : ''}\nBizi tercih ettiğiniz için teşekkür ederiz.`;
+      }${rem > 0 ? `Kalan Bakiye: *${formatCurrency(rem)}*\n` : ''}\nBizi tercih ettiğiniz için teşekkür ederiz.`;
 
-      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     };
 
     window.exportToCSV = () => {
       const filtered = getFilteredOrders();
+      if (filtered.length === 0) return;
       const headers = ['Ad Soyad', 'Telefon', 'Sipariş Tarihi', 'Teslimat Tarihi', 'Sipariş Durumu', 'Toplam Tutar', 'Alınan Para', 'Kalan Bakiye', 'Adres', 'Notlar'];
       const rows = filtered.map((o) => {
         const total = Number(o.totalAmount) || 0;
@@ -1513,11 +1381,79 @@
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `Musteri_Siparis_Listesi_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `Perde_Musteri_Listesi_${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       showToast('Excel (CSV) dosyası indirildi.');
     };
 
+    // Bulut & Yedekleme Modalı Fonksiyonları
+    window.openCloudModal = () => {
+      const input = document.getElementById('firebaseDbUrlInput');
+      if (input) input.value = customCloudUrl || DEFAULT_CLOUD_URL;
+      const modal = document.getElementById('cloudModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeCloudModal = () => {
+      const modal = document.getElementById('cloudModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.saveCloudConfig = async () => {
+      const input = document.getElementById('firebaseDbUrlInput');
+      const val = (input?.value || '').trim();
+      customCloudUrl = val;
+      if (val) {
+        localStorage.setItem(CLOUD_URL_KEY, val);
+        await fetchFromCustomCloud();
+        for (const o of orders) {
+          await pushOrderToCustomCloud(o);
+        }
+        showToast('Ortak Bulut bağlantısı kaydedildi ve senkronize edildi.');
+      } else {
+        localStorage.removeItem(CLOUD_URL_KEY);
+        updateCloudStatusIndicator(false);
+        showToast('Cihaz hafızası moduna geçildi.');
+      }
+      window.closeCloudModal();
+    };
+
+    window.downloadBackupJSON = () => {
+      const blob = new Blob([JSON.stringify(orders, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `perde_takip_yedek_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      showToast('Yedek dosyası indirildi.');
+    };
+
+    window.restoreBackupJSON = (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (Array.isArray(parsed)) {
+            orders = parsed;
+            saveToLocalStorage();
+            renderAll();
+            for (const o of orders) {
+              await pushOrderToCustomCloud(o);
+            }
+            window.closeCloudModal();
+            showToast('Yedek başarıyla yüklendi.');
+          }
+        } catch (err) {
+          showToast('Geçersiz yedek dosyası.');
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    // Ekran Kilitleme / Giriş
     window.lockScreen = () => {
       document.getElementById('appScreen').classList.add('hidden');
       const login = document.getElementById('loginScreen');
@@ -1525,7 +1461,7 @@
       login.classList.add('flex');
     };
 
-    document.getElementById('loginForm').addEventListener('submit', (e) => {
+    document.getElementById('loginForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const email = document.getElementById('loginEmail').value.trim();
       const pass = document.getElementById('loginPassword').value.trim();
@@ -1538,13 +1474,14 @@
       login.classList.add('hidden');
       login.classList.remove('flex');
       document.getElementById('appScreen').classList.remove('hidden');
-      showToast('Sisteme giriş yapıldı.');
+      showToast('Giriş başarılı.');
     });
 
-    window.onload = () => {
-      lucide.createIcons();
-      initStorage();
-    };
+    // Başlangıçta Çalıştır
+    loadFromLocalStorage();
+    renderAll();
+    fetchFromCustomCloud();
+    setInterval(fetchFromCustomCloud, 8000);
   </script>
 </body>
 </html>
