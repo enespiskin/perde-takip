@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#52735f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Perde CRM" />
+  <title>Perde & Sipariş Takip Sistemi</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f4f6f5;
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printArea, #printArea * {
+        visibility: visible;
+      }
+      #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- BİLDİRİM (TOAST) -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl items-center gap-2.5 text-sm transition-all">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+    <span id="toastText">İşlem başarılı</span>
+  </div>
+
+  <!-- GİRİŞ EKRANI (KİLİTLENDİĞİNDE GÖRÜNÜR) -->
+  <div id="loginScreen" class="hidden min-h-screen bg-[#466353] items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+      <div class="w-20 h-20 bg-[#52735f] rounded-xl mx-auto mb-5 flex items-center justify-center shadow-md">
+        <span class="text-white font-bold text-2xl tracking-wider">CRM</span>
+      </div>
+      <h1 class="text-2xl font-bold text-[#466353] leading-tight">
+        Müşteri & Sipariş<br />Yönetim Sistemi
+      </h1>
+      <p class="text-slate-500 text-sm mt-2 mb-6">Müşteri Listesi Yönetimi</p>
+
+      <div id="loginError" class="hidden mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+        Lütfen e-posta ve şifre alanlarını doldurun.
+      </div>
+
+      <form id="loginForm" class="text-left space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+            <i data-lucide="mail" class="w-3.5 h-3.5 text-slate-600"></i>
+            E-Posta Adresi
+          </label>
+          <input
+            type="email"
+            id="loginEmail"
+            class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#52735f]"
+            placeholder="ornek@firmaadi.com"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+            <i data-lucide="lock" class="w-3.5 h-3.5 text-slate-600"></i>
+            Şifre
+          </label>
+          <input
+            type="password"
+            id="loginPassword"
+            class="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#52735f]"
+            placeholder="••••••••••••"
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="w-full py-3 rounded-lg bg-[#52735f] hover:bg-[#415e4d] text-white font-semibold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <span>➔ Giriş Yap</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ANA UYGULAMA EKRANI -->
+  <div id="appScreen" class="min-h-screen flex flex-col">
+    <!-- ÜST YEŞİL BAR -->
+    <header class="bg-[#52735f] text-white shadow-md sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center font-bold text-lg border border-white/20">
+            P
+          </div>
+          <div>
+            <h1 class="font-bold text-base sm:text-lg leading-tight">
+              Perde & Sipariş Takip Sistemi
+            </h1>
+            <p class="text-xs text-emerald-100 hidden sm:block">
+              Müşteri, Ölçü, Atölye ve Tahsilat Yönetimi
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-2.5">
+          <button
+            onclick="openNewOrderModal()"
+            class="bg-white text-[#43614f] hover:bg-emerald-50 font-bold px-3.5 py-2 rounded-lg text-xs sm:text-sm shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Yeni Sipariş Ekle</span>
+          </button>
+
+          <button
+            onclick="lockScreen()"
+            title="Ekranı Kilitle"
+            class="bg-white/15 hover:bg-white/25 text-white px-3 py-2 rounded-lg text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+            <span class="hidden lg:inline">Kilitle</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ANA İÇERİK -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <!-- ÖZET KARTLARI (5 KART: TOPLAM MÜŞTERİ, AKTİF SİPARİŞ, TOPLAM CİRO, TOPLAM ALINAN PARA, KALAN ALACAK) -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <!-- 1. Toplam Müşteri -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-slate-500">Toplam Müşteri</p>
+            <p id="statTotalCustomers" class="text-xl sm:text-2xl font-bold text-slate-800 mt-1">0</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+            <i data-lucide="users" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- 2. Devam Eden Sipariş -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-slate-500">Üretim / Montajda</p>
+            <p id="statActiveOrders" class="text-xl sm:text-2xl font-bold text-amber-600 mt-1">0</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- 3. Toplam Sipariş Tutarı (Ciro) -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-slate-500">Toplam Tutar (Ciro)</p>
+            <p id="statTotalRevenue" class="text-lg sm:text-xl font-bold text-blue-600 mt-1">0 ₺</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <i data-lucide="trending-up" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- 4. Toplam Alınan Para (Tahsilat / Kapora) -->
+        <div class="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-emerald-700">Toplam Alınan Para</p>
+            <p id="statTotalCollected" class="text-lg sm:text-xl font-bold text-emerald-600 mt-1">0 ₺</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <i data-lucide="banknote" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- 5. Toplam Kalan Alacak (Bakiye) -->
+        <div class="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/20 shadow-sm flex items-center justify-between col-span-2 sm:col-span-1">
+          <div>
+            <p class="text-xs font-semibold text-rose-700">Toplam Kalan Alacak</p>
+            <p id="statTotalReceivable" class="text-lg sm:text-xl font-bold text-rose-600 mt-1">0 ₺</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+            <i data-lucide="wallet" class="w-5 h-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- MÜŞTERİ LİSTESİ ANA KARTI -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
+        <!-- Başlık ve Üst Aksiyon Butonları -->
+        <div class="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-bold text-[#4c6b58]">Müşteri Listesi</h2>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Müşterilerinizi ekleyin, saniyeler içinde arayın ve sipariş durumlarını yönetin
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="openNewOrderModal()"
+              class="px-3.5 py-2 rounded-lg bg-[#52735f] hover:bg-[#415c4c] text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Yeni Müşteri Ekle</span>
+            </button>
+
+            <button
+              id="btnExportCSV"
+              onclick="exportToCSV()"
+              class="px-3.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+            >
+              <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+              <span>Excel İndir</span>
+            </button>
+
+            <button
+              id="btnClearAll"
+              onclick="openClearAllModal()"
+              class="hidden px-3.5 py-2 rounded-lg border border-rose-200 bg-rose-50/60 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-medium items-center gap-1.5 transition cursor-pointer"
+            >
+              <i data-lucide="trash-2" class="w-4 h-4 text-rose-600"></i>
+              <span>Tüm Kayıtları Temizle</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Arama, Durum Seçimi ve Sayfa Başına Filtre Alanı -->
+        <div class="p-5 sm:p-6 bg-slate-50/60 border-b border-slate-100 space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+            <!-- Arama Kutusu -->
+            <div class="md:col-span-5">
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">Arama:</label>
+              <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                <input
+                  type="text"
+                  id="searchInput"
+                  oninput="handleFilterChange()"
+                  placeholder="Müşteri adı, telefon veya adres..."
+                  class="w-full pl-10 pr-8 py-2.5 bg-white rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#52735f]"
+                />
+              </div>
+            </div>
+
+            <!-- Sipariş Durumu Dropdown -->
+            <div class="md:col-span-4">
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">Sipariş Durumu:</label>
+              <select
+                id="statusSelect"
+                onchange="handleStatusDropdownChange(this.value)"
+                class="w-full px-3.5 py-2.5 bg-white rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#52735f] cursor-pointer"
+              >
+                <option value="Tümü">Tümü</option>
+                <option value="Yeni Sipariş">Yeni Sipariş</option>
+                <option value="Firma">Firma</option>
+                <option value="Atölye">Atölye</option>
+                <option value="Montaj">Montaj</option>
+                <option value="Teslim Edildi">Teslim Edildi</option>
+              </select>
+            </div>
+
+            <!-- Sayfa Başına Gösterim -->
+            <div class="md:col-span-3">
+              <label class="block text-xs font-bold text-slate-700 mb-1.5">Sayfa Başına:</label>
+              <select
+                id="itemsPerPageSelect"
+                onchange="handleFilterChange()"
+                class="w-full px-3.5 py-2.5 bg-white rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#52735f] cursor-pointer"
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Hızlı Durum Filtre Hapları -->
+          <div id="statusPillsContainer" class="flex items-center gap-2 overflow-x-auto pb-1 pt-1"></div>
+        </div>
+
+        <!-- MASAÜSTÜ TABLO GÖRÜNÜMÜ -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-[#52735f] text-white text-xs uppercase tracking-wider">
+                <th class="py-3.5 px-4 font-semibold">Ad Soyad</th>
+                <th class="py-3.5 px-4 font-semibold">Telefon 1</th>
+                <th class="py-3.5 px-4 font-semibold">Sipariş Tarihi</th>
+                <th class="py-3.5 px-4 font-semibold">Teslimat Tarihi</th>
+                <th class="py-3.5 px-4 font-semibold">Sipariş Durumu</th>
+                <th class="py-3.5 px-4 font-semibold">Toplam / Alınan / Kalan</th>
+                <th class="py-3.5 px-4 font-semibold">Adres</th>
+                <th class="py-3.5 px-4 font-semibold text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody id="desktopTableBody" class="divide-y divide-slate-200 text-sm"></tbody>
+          </table>
+        </div>
+
+        <!-- MOBİL KART GÖRÜNÜMÜ -->
+        <div id="mobileCardsContainer" class="md:hidden divide-y divide-slate-200"></div>
+
+        <!-- ALT SAYFALAMA VE KAYIT SAYISI -->
+        <div class="p-4 sm:px-6 bg-slate-50/70 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+          <div id="paginationCountText">0 müşteri</div>
+          <div id="paginationControls" class="flex items-center gap-1.5"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ALT FOOTER -->
+    <footer class="bg-[#52735f] text-white mt-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between text-xs">
+        <span>Perde & Sipariş Müşteri Yönetimi</span>
+        <span class="px-2.5 py-1 rounded-full bg-white/15 font-medium">v2.1</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL 1: YENİ SİPARİŞ / DÜZENLEME FORMU -->
+  <div id="orderFormModal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 bg-[#52735f] text-white flex items-center justify-between">
+        <div>
+          <h3 id="formModalTitle" class="font-bold text-lg">Yeni Müşteri & Perde Siparişi Ekle</h3>
+          <p class="text-xs text-emerald-100">Müşteri iletişim bilgilerini, perde ölçülerini ve ödeme detaylarını kaydedin</p>
+        </div>
+        <button onclick="closeOrderFormModal()" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="orderForm" onsubmit="handleSaveOrder(event)" class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <!-- Müşteri Bilgileri -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Ad Soyad *</label>
+            <input type="text" id="fieldFullName" required placeholder="Örn: Ahmet Yılmaz" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Telefon Numarası *</label>
+            <input type="text" id="fieldPhone" required placeholder="Örn: 0532 000 00 00" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Sipariş Durumu</label>
+            <select id="fieldStatus" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none">
+              <option value="Yeni Sipariş">Yeni Sipariş</option>
+              <option value="Firma">Firma</option>
+              <option value="Atölye">Atölye</option>
+              <option value="Montaj">Montaj</option>
+              <option value="Teslim Edildi">Teslim Edildi</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Sipariş Tarihi</label>
+            <input type="date" id="fieldOrderDate" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Planlanan Teslimat Tarihi</label>
+            <input type="date" id="fieldDeliveryDate" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Adres</label>
+            <input type="text" id="fieldAddress" placeholder="Mahalle, Sokak, Bina/Daire, İlçe" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none" />
+          </div>
+        </div>
+
+        <!-- Oda ve Perde Ölçüleri -->
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-bold text-[#466353] flex items-center gap-1.5">
+              <i data-lucide="ruler" class="w-4 h-4"></i>
+              <span>Oda ve Perde Ölçü Detayları</span>
+            </h4>
+            <button type="button" onclick="addMeasurementRow()" class="px-3 py-1.5 rounded-lg bg-[#52735f] text-white text-xs font-semibold hover:bg-[#415c4c] flex items-center gap-1 cursor-pointer">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Oda / Ölçü Ekle</span>
+            </button>
+          </div>
+          <div id="measurementsContainer" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Muhasebe: Toplam Tutar, Alınan Para, Kalan Bakiye -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Toplam Sipariş Tutarı (₺)</label>
+            <input type="number" id="fieldTotalAmount" oninput="updateRemainingDisplay()" placeholder="0" class="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-semibold" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-emerald-700 mb-1">Alınan Para / Kapora (₺)</label>
+            <input type="number" id="fieldDepositAmount" oninput="updateRemainingDisplay()" placeholder="0" class="w-full px-3.5 py-2 rounded-lg border border-emerald-300 bg-white text-sm font-semibold text-emerald-700" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-rose-700 mb-1">Kalan Bakiye (Otomatik)</label>
+            <div id="fieldRemainingDisplay" class="w-full px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-100 text-sm font-bold text-rose-600">
+              0 ₺
+            </div>
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-xs font-bold text-slate-700 mb-1">Atölye / Montaj Notu</label>
+            <textarea id="fieldNotes" rows="2" placeholder="Örn: Korniş takılacak, etek kurşunlu olacak..." class="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:ring-2 focus:ring-[#52735f] focus:outline-none"></textarea>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-200">
+          <button type="button" onclick="closeOrderFormModal()" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer">
+            İptal
+          </button>
+          <button type="submit" id="btnSubmitOrder" class="px-6 py-2.5 rounded-xl bg-[#52735f] hover:bg-[#415c4c] text-white text-sm font-bold shadow-md cursor-pointer">
+            Siparişi Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SİPARİŞ DETAY & ÖLÇÜ FİŞİ YAZDIRMA -->
+  <div id="viewOrderModal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div id="printArea" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+      <div class="px-6 py-4 bg-[#52735f] text-white flex items-center justify-between">
+        <div>
+          <h3 id="viewModalTitle" class="font-bold text-lg">Sipariş & Ölçü Fişi</h3>
+          <p id="viewModalSubtitle" class="text-xs text-emerald-100"></p>
+        </div>
+        <div class="flex items-center gap-2 no-print">
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Yazdır</span>
+          </button>
+          <button onclick="closeViewOrderModal()" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+      <div id="viewModalBody" class="p-6 space-y-5 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: TEK KAYIT SİLME ONAYI -->
+  <div id="deleteConfirmModal" class="fixed inset-0 z-50 hidden bg-black/60 items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center space-y-4">
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 mx-auto flex items-center justify-center">
+        <i data-lucide="trash-2" class="w-6 h-6"></i>
+      </div>
+      <h3 class="font-bold text-lg text-slate-900">Kaydı Silmek İstiyor Musunuz?</h3>
+      <p id="deleteConfirmText" class="text-sm text-slate-600"></p>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer">
+          Vazgeç
+        </button>
+        <button onclick="confirmDeleteOrder()" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold cursor-pointer">
+          Evet, Sil
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: TÜMÜNÜ TEMİZLEME ONAYI -->
+  <div id="clearAllModal" class="fixed inset-0 z-50 hidden bg-black/60 items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 text-center space-y-4">
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 mx-auto flex items-center justify-center">
+        <i data-lucide="trash-2" class="w-6 h-6"></i>
+      </div>
+      <h3 class="font-bold text-lg text-slate-900">Tüm Tabloyu Sıfırlamak İstiyor Musunuz?</h3>
+      <p class="text-sm text-slate-600">Tablodaki tüm kayıtlar kalıcı olarak silinecek ve liste sıfırlanacaktır.</p>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button onclick="closeClearAllModal()" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer">
+          Vazgeç
+        </button>
+        <button onclick="confirmClearAllOrders()" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold cursor-pointer">
+          Evet, Tümünü Temizle
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIREBASE VE UYGULAMA MANTIĞI -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const ORDER_STATUSES = [
+      { id: 'Yeni Sipariş', label: 'Yeni Sipariş', bg: 'bg-blue-100 text-blue-800 border-blue-200', dot: 'bg-blue-600' },
+      { id: 'Firma', label: 'Firma', bg: 'bg-amber-100 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+      { id: 'Atölye', label: 'Atölye', bg: 'bg-purple-100 text-purple-800 border-purple-200', dot: 'bg-purple-600' },
+      { id: 'Montaj', label: 'Montaj', bg: 'bg-cyan-100 text-cyan-800 border-cyan-200', dot: 'bg-cyan-600' },
+      { id: 'Teslim Edildi', label: 'Teslim Edildi', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-600' }
+    ];
+
+    const ROOM_TYPES = ['Salon', 'Oturma Odası', 'Yatak Odası', 'Çocuk Odası', 'Mutfak', 'Balkon', 'Ofis / İşyeri'];
+    const CURTAIN_TYPES = ['Tül Perde', 'Fon Perde', 'Stor Perde', 'Zebra Perde', 'Güneşlik', 'Jaluzi', 'Dikey Perde', 'Plise Perde', 'Rustik / Korniş'];
+    const PLEAT_TYPES = ['1x3 Sık Pile', '1x2.5 Orta Pile', '1x2 Seyrek Pile', 'Kruvaze', 'Pilesiz / Düz', 'Standart Mekanizma'];
+
+    // State
+    let orders = [];
+    let currentStatusFilter = 'Tümü';
+    let currentPage = 1;
+    let editingOrderId = null;
+    let deletingOrderId = null;
+    let currentItems = [];
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'perde-siparis-takip-crm';
+
+    // Firebase Başlatma
+    async function initFirebase() {
+      try {
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+          const firebaseConfig = JSON.parse(__firebase_config);
+          const app = initializeApp(firebaseConfig);
+          auth = getAuth(app);
+          db = getFirestore(app);
+
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+
+          onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+              const ordersCol = collection(db, 'artifacts', appId, 'public', 'data', 'curtain_orders');
+              onSnapshot(
+                ordersCol,
+                (snapshot) => {
+                  orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+                  orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                  renderAll();
+                },
+                (err) => {
+                  console.error("Veri okuma hatası:", err);
+                  renderAll();
+                }
+              );
+            }
+          });
+        } else {
+          renderAll();
+        }
+      } catch (e) {
+        console.error("Başlatma hatası:", e);
+        renderAll();
+      }
+    }
+
+    // Yardımcı Fonksiyonlar
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastText').textContent = msg;
+      toast.classList.remove('hidden');
+      toast.classList.add('flex');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      }, 3200);
+    }
+
+    function formatDateTR(dateStr) {
+      if (!dateStr) return '-';
+      if (dateStr.includes('.')) return dateStr;
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+
+    function formatCurrency(val) {
+      const num = Number(val) || 0;
+      return num.toLocaleString('tr-TR') + ' ₺';
+    }
+
+    function getStatusStyle(statusId) {
+      return ORDER_STATUSES.find((s) => s.id === statusId) || ORDER_STATUSES[0];
+    }
+
+    // Filtrelenmiş Liste
+    function getFilteredOrders() {
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+      return orders.filter((o) => {
+        const matchesSearch =
+          !q ||
+          (o.fullName && o.fullName.toLowerCase().includes(q)) ||
+          (o.phone && o.phone.toLowerCase().includes(q)) ||
+          (o.address && o.address.toLowerCase().includes(q));
+        const matchesStatus = currentStatusFilter === 'Tümü' || o.status === currentStatusFilter;
+        return matchesSearch && matchesStatus;
+      });
+    }
+
+    // Tüm Arayüzü Yenile
+    function renderAll() {
+      renderStats();
+      renderStatusPills();
+      renderTableAndCards();
+      lucide.createIcons();
+    }
+
+    // 1. Üst Özet Kartları (Toplam Alınan Para dahil)
+    function renderStats() {
+      const totalCustomers = orders.length;
+      const activeOrders = orders.filter((o) => o.status !== 'Teslim Edildi').length;
+      let totalRevenue = 0;
+      let totalCollected = 0;
+      let totalReceivable = 0;
+
+      orders.forEach((o) => {
+        const total = Number(o.totalAmount) || 0;
+        const dep = Number(o.depositAmount) || 0;
+        totalRevenue += total;
+        totalCollected += dep;
+        totalReceivable += Math.max(0, total - dep);
+      });
+
+      document.getElementById('statTotalCustomers').textContent = totalCustomers;
+      document.getElementById('statActiveOrders').textContent = activeOrders;
+      document.getElementById('statTotalRevenue').textContent = formatCurrency(totalRevenue);
+      document.getElementById('statTotalCollected').textContent = formatCurrency(totalCollected);
+      document.getElementById('statTotalReceivable').textContent = formatCurrency(totalReceivable);
+
+      const clearBtn = document.getElementById('btnClearAll');
+      if (orders.length > 0) {
+        clearBtn.classList.remove('hidden');
+        clearBtn.classList.add('flex');
+      } else {
+        clearBtn.classList.add('hidden');
+        clearBtn.classList.remove('flex');
+      }
+      document.getElementById('btnExportCSV').disabled = orders.length === 0;
+    }
+
+    // 2. Durum Filtre Butonları
+    function renderStatusPills() {
+      const container = document.getElementById('statusPillsContainer');
+      const allActive = currentStatusFilter === 'Tümü';
+      let html = `
+        <button onclick="setStatusFilter('Tümü')" class="px-3 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer ${
+          allActive ? 'bg-[#52735f] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+        }">
+          Tümü (${orders.length})
+        </button>
+      `;
+
+      ORDER_STATUSES.forEach((st) => {
+        const count = orders.filter((o) => o.status === st.id).length;
+        const active = currentStatusFilter === st.id;
+        html += `
+          <button onclick="setStatusFilter('${st.id}')" class="px-3 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            active ? 'bg-[#52735f] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+          }">
+            <span class="w-2 h-2 rounded-full ${active ? 'bg-white' : st.dot}"></span>
+            <span>${st.label}</span>
+            <span class="text-[11px] ${active ? 'text-emerald-100' : 'text-slate-400'}">(${count})</span>
+          </button>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // 3. Masaüstü Tablo ve Mobil Kartlar
+    function renderTableAndCards() {
+      const filtered = getFilteredOrders();
+      const itemsPerPage = Number(document.getElementById('itemsPerPageSelect')?.value || 10);
+      const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      const start = (currentPage - 1) * itemsPerPage;
+      const paginated = filtered.slice(start, start + itemsPerPage);
+
+      const tbody = document.getElementById('desktopTableBody');
+      const mobileContainer = document.getElementById('mobileCardsContainer');
+
+      if (paginated.length === 0) {
+        const emptyMsg = orders.length === 0
+          ? 'Henüz kayıtlı müşteri veya sipariş bulunmuyor.'
+          : 'Aradığınız kriterlere uygun müşteri kaydı bulunamadı.';
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="py-14 px-4 text-center">
+              <div class="max-w-md mx-auto space-y-3">
+                <p class="text-slate-700 font-semibold text-base">${emptyMsg}</p>
+                ${
+                  orders.length === 0
+                    ? `<button onclick="openNewOrderModal()" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#52735f] hover:bg-[#415c4c] text-white text-xs font-bold cursor-pointer">
+                        <span>+ İlk Müşteriyi Ekle</span>
+                      </button>`
+                    : ''
+                }
+              </div>
+            </td>
+          </tr>
+        `;
+        mobileContainer.innerHTML = `
+          <div class="p-8 text-center space-y-3">
+            <p class="text-slate-700 font-semibold text-sm">${emptyMsg}</p>
+          </div>
+        `;
+      } else {
+        tbody.innerHTML = paginated
+          .map((order) => {
+            const stStyle = getStatusStyle(order.status);
+            const total = Number(order.totalAmount) || 0;
+            const dep = Number(order.depositAmount) || 0;
+            const rem = Math.max(0, total - dep);
+            const itemCount = order.items ? order.items.length : 0;
+
+            return `
+              <tr class="hover:bg-slate-50/90 transition">
+                <td class="py-3.5 px-4 font-medium text-slate-900">
+                  <div>${order.fullName || '-'}</div>
+                  ${
+                    itemCount > 0
+                      ? `<span class="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
+                          ${itemCount} Kalem Ölçü
+                        </span>`
+                      : ''
+                  }
+                </td>
+                <td class="py-3.5 px-4 text-slate-700 whitespace-nowrap">${order.phone || '-'}</td>
+                <td class="py-3.5 px-4 text-slate-700 whitespace-nowrap">${formatDateTR(order.orderDate)}</td>
+                <td class="py-3.5 px-4 text-slate-700 whitespace-nowrap">${formatDateTR(order.deliveryDate)}</td>
+                <td class="py-3.5 px-4 whitespace-nowrap">
+                  <select onchange="quickStatusChange('${order.id}', this.value)" class="px-3 py-1 rounded-full text-xs font-semibold border cursor-pointer focus:outline-none ${stStyle.bg}">
+                    ${ORDER_STATUSES.map(
+                      (s) => `<option value="${s.id}" ${s.id === order.status ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
+                    ).join('')}
+                  </select>
+                </td>
+                <td class="py-3.5 px-4 whitespace-nowrap">
+                  ${
+                    total > 0 || dep > 0
+                      ? `<div class="space-y-0.5 text-xs">
+                          <div class="font-semibold text-slate-800">Top: ${formatCurrency(total)}</div>
+                          <div class="text-emerald-600 font-medium">Alınan: ${formatCurrency(dep)}</div>
+                          <div class="font-bold ${rem > 0 ? 'text-rose-600' : 'text-emerald-600'}">
+                            ${rem > 0 ? `Kalan: ${formatCurrency(rem)}` : 'Tamamı Ödendi'}
+                          </div>
+                        </div>`
+                      : '<span class="text-xs text-slate-400">-</span>'
+                  }
+                </td>
+                <td class="py-3.5 px-4 text-slate-700 max-w-xs truncate" title="${order.address || ''}">
+                  ${order.address || '-'}
+                </td>
+                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                  <div class="inline-flex items-center gap-1">
+                    <button onclick="openWhatsApp('${order.id}')" title="WhatsApp ile Bilgilendir" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer">
+                      <i data-lucide="message-circle" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="openViewOrderModal('${order.id}')" title="Detay & Ölçü Fişi" class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">
+                      <i data-lucide="eye" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="openEditOrderModal('${order.id}')" title="Düzenle" class="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 cursor-pointer">
+                      <i data-lucide="edit-3" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="openDeleteModal('${order.id}')" title="Sil" class="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
+
+        mobileContainer.innerHTML = paginated
+          .map((order) => {
+            const stStyle = getStatusStyle(order.status);
+            const total = Number(order.totalAmount) || 0;
+            const dep = Number(order.depositAmount) || 0;
+            const rem = Math.max(0, total - dep);
+            const itemCount = order.items ? order.items.length : 0;
+
+            return `
+              <div class="p-4 space-y-3 bg-white">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 class="font-bold text-slate-900 text-base">${order.fullName || '-'}</h3>
+                    <a href="tel:${order.phone || ''}" class="text-xs text-[#52735f] font-semibold flex items-center gap-1 mt-0.5">
+                      ${order.phone || '-'}
+                    </a>
+                  </div>
+                  <select onchange="quickStatusChange('${order.id}', this.value)" class="px-2.5 py-1 rounded-full text-xs font-semibold border ${stStyle.bg}">
+                    ${ORDER_STATUSES.map(
+                      (s) => `<option value="${s.id}" ${s.id === order.status ? 'selected' : ''} class="bg-white text-slate-800">${s.label}</option>`
+                    ).join('')}
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <div>
+                    <span class="text-slate-400 block">Toplam:</span>
+                    <span class="font-semibold text-slate-800">${formatCurrency(total)}</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block">Alınan:</span>
+                    <span class="font-semibold text-emerald-600">${formatCurrency(dep)}</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 block">Kalan:</span>
+                    <span class="font-bold ${rem > 0 ? 'text-rose-600' : 'text-emerald-600'}">${rem > 0 ? formatCurrency(rem) : 'Ödendi'}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <div class="flex items-center gap-1.5">
+                    <button onclick="openWhatsApp('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold flex items-center gap-1">
+                      <span>WhatsApp</span>
+                    </button>
+                    <button onclick="openViewOrderModal('${order.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
+                      <span>Ölçüler (${itemCount})</span>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button onclick="openEditOrderModal('${order.id}')" class="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50">
+                      <i data-lucide="edit-3" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="openDeleteModal('${order.id}')" class="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+      }
+
+      // Alt Sayfalama Bilgisi
+      const countText = document.getElementById('paginationCountText');
+      if (filtered.length > 0) {
+        countText.textContent = `${start + 1}-${Math.min(start + itemsPerPage, filtered.length)} / ${filtered.length} müşteri`;
+      } else {
+        countText.textContent = '0 müşteri';
+      }
+
+      const controls = document.getElementById('paginationControls');
+      if (totalPages > 1) {
+        controls.innerHTML = `
+          <button onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-100 cursor-pointer">Önceki</button>
+          <span class="px-2 font-semibold">Sayfa ${currentPage} / ${totalPages}</span>
+          <button onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-100 cursor-pointer">Sonraki</button>
+        `;
+      } else {
+        controls.innerHTML = '';
+      }
+    }
+
+    // Ölçü Satırlarını Render Et
+    function renderMeasurementRows() {
+      const container = document.getElementById('measurementsContainer');
+      container.innerHTML = currentItems
+        .map(
+          (item, idx) => `
+        <div class="grid grid-cols-2 sm:grid-cols-12 gap-2 bg-white p-3 rounded-xl border border-slate-200 items-end">
+          <div class="col-span-1 sm:col-span-2">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Oda</label>
+            <select onchange="updateItemField(${idx}, 'room', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
+              ${ROOM_TYPES.map((r) => `<option value="${r}" ${r === item.room ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-span-1 sm:col-span-2">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Perde Türü</label>
+            <select onchange="updateItemField(${idx}, 'type', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
+              ${CURTAIN_TYPES.map((c) => `<option value="${c}" ${c === item.type ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-span-1 sm:col-span-1">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">En (cm)</label>
+            <input type="number" placeholder="300" value="${item.width || ''}" oninput="updateItemField(${idx}, 'width', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+          </div>
+          <div class="col-span-1 sm:col-span-1">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Boy (cm)</label>
+            <input type="number" placeholder="260" value="${item.height || ''}" oninput="updateItemField(${idx}, 'height', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+          </div>
+          <div class="col-span-2 sm:col-span-2">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Pile / Mekanizma</label>
+            <select onchange="updateItemField(${idx}, 'pleat', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs">
+              ${PLEAT_TYPES.map((p) => `<option value="${p}" ${p === item.pleat ? 'selected' : ''}>${p}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-span-1 sm:col-span-2">
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Tutar (₺)</label>
+            <input type="number" placeholder="0" value="${item.price || ''}" oninput="updateItemField(${idx}, 'price', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+          </div>
+          <div class="col-span-1 sm:col-span-2 flex items-center gap-1">
+            <div class="flex-1">
+              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Kumaş/Not</label>
+              <input type="text" placeholder="Krem keten" value="${item.note || ''}" oninput="updateItemField(${idx}, 'note', this.value)" class="w-full px-2 py-1.5 rounded border border-slate-300 text-xs" />
+            </div>
+            ${
+              currentItems.length > 1
+                ? `<button type="button" onclick="removeMeasurementRow(${idx})" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded mt-4 cursor-pointer">✕</button>`
+                : ''
+            }
+          </div>
+        </div>
+      `
+        )
+        .join('');
+    }
+
+    // Window Global Fonksiyonları
+    window.handleFilterChange = () => {
+      currentPage = 1;
+      renderAll();
+    };
+
+    window.handleStatusDropdownChange = (val) => {
+      currentStatusFilter = val;
+      currentPage = 1;
+      renderAll();
+    };
+
+    window.setStatusFilter = (val) => {
+      currentStatusFilter = val;
+      document.getElementById('statusSelect').value = val;
+      currentPage = 1;
+      renderAll();
+    };
+
+    window.changePage = (p) => {
+      currentPage = p;
+      renderAll();
+    };
+
+    window.updateRemainingDisplay = () => {
+      const total = Number(document.getElementById('fieldTotalAmount').value) || 0;
+      const dep = Number(document.getElementById('fieldDepositAmount').value) || 0;
+      const rem = Math.max(0, total - dep);
+      document.getElementById('fieldRemainingDisplay').textContent = formatCurrency(rem);
+    };
+
+    window.addMeasurementRow = () => {
+      currentItems.push({ room: 'Oturma Odası', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' });
+      renderMeasurementRows();
+    };
+
+    window.removeMeasurementRow = (idx) => {
+      currentItems.splice(idx, 1);
+      renderMeasurementRows();
+      recalcTotalFromItems();
+    };
+
+    window.updateItemField = (idx, field, val) => {
+      currentItems[idx][field] = val;
+      if (field === 'price') recalcTotalFromItems();
+    };
+
+    function recalcTotalFromItems() {
+      const sum = currentItems.reduce((acc, it) => acc + (Number(it.price) || 0), 0);
+      if (sum > 0) {
+        document.getElementById('fieldTotalAmount').value = sum;
+        window.updateRemainingDisplay();
+      }
+    }
+
+    window.openNewOrderModal = () => {
+      editingOrderId = null;
+      document.getElementById('formModalTitle').textContent = 'Yeni Müşteri & Perde Siparişi Ekle';
+      document.getElementById('btnSubmitOrder').textContent = 'Siparişi Kaydet';
+      document.getElementById('fieldFullName').value = '';
+      document.getElementById('fieldPhone').value = '';
+      document.getElementById('fieldStatus').value = 'Yeni Sipariş';
+      document.getElementById('fieldOrderDate').value = new Date().toISOString().split('T')[0];
+      document.getElementById('fieldDeliveryDate').value = '';
+      document.getElementById('fieldAddress').value = '';
+      document.getElementById('fieldTotalAmount').value = '';
+      document.getElementById('fieldDepositAmount').value = '';
+      document.getElementById('fieldNotes').value = '';
+      currentItems = [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' }];
+      renderMeasurementRows();
+      window.updateRemainingDisplay();
+
+      const modal = document.getElementById('orderFormModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.openEditOrderModal = (id) => {
+      const ord = orders.find((o) => o.id === id);
+      if (!ord) return;
+      editingOrderId = id;
+      document.getElementById('formModalTitle').textContent = 'Müşteri & Sipariş Düzenle';
+      document.getElementById('btnSubmitOrder').textContent = 'Değişiklikleri Kaydet';
+      document.getElementById('fieldFullName').value = ord.fullName || '';
+      document.getElementById('fieldPhone').value = ord.phone || '';
+      document.getElementById('fieldStatus').value = ord.status || 'Yeni Sipariş';
+      document.getElementById('fieldOrderDate').value = ord.orderDate || '';
+      document.getElementById('fieldDeliveryDate').value = ord.deliveryDate || '';
+      document.getElementById('fieldAddress').value = ord.address || '';
+      document.getElementById('fieldTotalAmount').value = ord.totalAmount || '';
+      document.getElementById('fieldDepositAmount').value = ord.depositAmount || '';
+      document.getElementById('fieldNotes').value = ord.notes || '';
+      currentItems = ord.items && ord.items.length > 0
+        ? JSON.parse(JSON.stringify(ord.items))
+        : [{ room: 'Salon', type: 'Tül Perde', width: '', height: '', pleat: '1x3 Sık Pile', price: '', note: '' }];
+      renderMeasurementRows();
+      window.updateRemainingDisplay();
+
+      const modal = document.getElementById('orderFormModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeOrderFormModal = () => {
+      const modal = document.getElementById('orderFormModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.handleSaveOrder = async (e) => {
+      e.preventDefault();
+      const payload = {
+        fullName: document.getElementById('fieldFullName').value.trim(),
+        phone: document.getElementById('fieldPhone').value.trim(),
+        status: document.getElementById('fieldStatus').value,
+        orderDate: document.getElementById('fieldOrderDate').value,
+        deliveryDate: document.getElementById('fieldDeliveryDate').value,
+        address: document.getElementById('fieldAddress').value.trim(),
+        totalAmount: Number(document.getElementById('fieldTotalAmount').value) || 0,
+        depositAmount: Number(document.getElementById('fieldDepositAmount').value) || 0,
+        notes: document.getElementById('fieldNotes').value.trim(),
+        items: currentItems,
+        updatedAt: Date.now()
+      };
+
+      try {
+        if (db && currentUser) {
+          if (editingOrderId) {
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', editingOrderId);
+            await updateDoc(ref, payload);
+            showToast('Müşteri bilgileri güncellendi.');
+          } else {
+            const col = collection(db, 'artifacts', appId, 'public', 'data', 'curtain_orders');
+            await addDoc(col, { ...payload, createdAt: Date.now() });
+            showToast('Yeni müşteri siparişi eklendi.');
+          }
+        } else {
+          if (editingOrderId) {
+            orders = orders.map((o) => (o.id === editingOrderId ? { ...o, ...payload } : o));
+          } else {
+            orders.unshift({ id: crypto.randomUUID(), ...payload, createdAt: Date.now() });
+          }
+          renderAll();
+          showToast('Sipariş kaydedildi.');
+        }
+        window.closeOrderFormModal();
+      } catch (err) {
+        console.error(err);
+        showToast('Kaydedilirken bir hata oluştu.');
+      }
+    };
+
+    window.quickStatusChange = async (id, newStatus) => {
+      try {
+        if (db && currentUser) {
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', id);
+          await updateDoc(ref, { status: newStatus });
+        } else {
+          orders = orders.map((o) => (o.id === id ? { ...o, status: newStatus } : o));
+          renderAll();
+        }
+        showToast(`Sipariş durumu "${newStatus}" olarak güncellendi.`);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.openViewOrderModal = (id) => {
+      const ord = orders.find((o) => o.id === id);
+      if (!ord) return;
+      const total = Number(ord.totalAmount) || 0;
+      const dep = Number(ord.depositAmount) || 0;
+      const rem = Math.max(0, total - dep);
+
+      document.getElementById('viewModalTitle').textContent = `${ord.fullName} — Sipariş & Ölçü Fişi`;
+      document.getElementById('viewModalSubtitle').textContent = `Durum: ${ord.status}`;
+
+      const itemsHtml =
+        ord.items && ord.items.length > 0
+          ? `<div class="border border-slate-200 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 text-slate-700">
+                  <tr>
+                    <th class="p-2.5">Oda</th>
+                    <th class="p-2.5">Perde Türü</th>
+                    <th class="p-2.5">En x Boy (cm)</th>
+                    <th class="p-2.5">Pile</th>
+                    <th class="p-2.5">Not / Kumaş</th>
+                    <th class="p-2.5 text-right">Tutar</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  ${ord.items
+                    .map(
+                      (it) => `
+                    <tr>
+                      <td class="p-2.5 font-semibold">${it.room || '-'}</td>
+                      <td class="p-2.5">${it.type || '-'}</td>
+                      <td class="p-2.5 font-bold text-[#466353]">${it.width || '-'} x ${it.height || '-'} cm</td>
+                      <td class="p-2.5">${it.pleat || '-'}</td>
+                      <td class="p-2.5 text-slate-600">${it.note || '-'}</td>
+                      <td class="p-2.5 text-right font-semibold">${it.price ? formatCurrency(it.price) : '-'}</td>
+                    </tr>
+                  `
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>`
+          : `<p class="text-xs text-slate-500 italic">Bu siparişe ait detaylı ölçü girilmemiş.</p>`;
+
+      document.getElementById('viewModalBody').innerHTML = `
+        <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-xs text-slate-400 block">Müşteri Telefonu</span>
+            <span class="font-bold text-slate-800">${ord.phone || '-'}</span>
+          </div>
+          <div>
+            <span class="text-xs text-slate-400 block">Sipariş / Teslim Tarihi</span>
+            <span class="font-semibold text-slate-800">${formatDateTR(ord.orderDate)} ➔ ${formatDateTR(ord.deliveryDate)}</span>
+          </div>
+          <div class="col-span-2">
+            <span class="text-xs text-slate-400 block">Teslimat Adresi</span>
+            <span class="font-medium text-slate-800">${ord.address || '-'}</span>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-800 mb-2">Alınan Perde Ölçüleri</h4>
+          ${itemsHtml}
+        </div>
+
+        ${
+          ord.notes
+            ? `<div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                <span class="font-bold block mb-0.5">Atölye ve Montaj Notu:</span>
+                ${ord.notes}
+              </div>`
+            : ''
+        }
+
+        <div class="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-200">
+          <div class="space-y-0.5">
+            <div class="text-xs text-slate-500">Toplam Tutar: <strong class="text-slate-800">${formatCurrency(total)}</strong></div>
+            <div class="text-xs text-slate-500">Alınan Para: <strong class="text-emerald-600">${formatCurrency(dep)}</strong></div>
+            <div class="text-sm font-bold text-rose-600">Kalan Bakiye: ${formatCurrency(rem)}</div>
+          </div>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="openWhatsApp('${ord.id}')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer">
+              WhatsApp Bilgi Gönder
+            </button>
+          </div>
+        </div>
+      `;
+
+      const modal = document.getElementById('viewOrderModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeViewOrderModal = () => {
+      const modal = document.getElementById('viewOrderModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.openDeleteModal = (id) => {
+      const ord = orders.find((o) => o.id === id);
+      if (!ord) return;
+      deletingOrderId = id;
+      document.getElementById('deleteConfirmText').innerHTML = `<strong>${ord.fullName}</strong> adlı müşterinin sipariş kaydı kalıcı olarak silinecektir.`;
+      const modal = document.getElementById('deleteConfirmModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeDeleteModal = () => {
+      deletingOrderId = null;
+      const modal = document.getElementById('deleteConfirmModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.confirmDeleteOrder = async () => {
+      if (!deletingOrderId) return;
+      try {
+        if (db && currentUser) {
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', deletingOrderId);
+          await deleteDoc(ref);
+        } else {
+          orders = orders.filter((o) => o.id !== deletingOrderId);
+          renderAll();
+        }
+        showToast('Müşteri kaydı silindi.');
+        window.closeDeleteModal();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.openClearAllModal = () => {
+      const modal = document.getElementById('clearAllModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeClearAllModal = () => {
+      const modal = document.getElementById('clearAllModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.confirmClearAllOrders = async () => {
+      try {
+        if (db && currentUser) {
+          for (const ord of orders) {
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', ord.id);
+            await deleteDoc(ref);
+          }
+        } else {
+          orders = [];
+          renderAll();
+        }
+        window.closeClearAllModal();
+        showToast('Tüm kayıtlar temizlendi.');
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.openWhatsApp = (id) => {
+      const ord = orders.find((o) => o.id === id);
+      if (!ord) return;
+      const cleanPhone = (ord.phone || '').replace(/\D/g, '');
+      const formattedPhone = cleanPhone.startsWith('0')
+        ? '9' + cleanPhone
+        : cleanPhone.startsWith('90')
+        ? cleanPhone
+        : '90' + cleanPhone;
+
+      const total = Number(ord.totalAmount) || 0;
+      const dep = Number(ord.depositAmount) || 0;
+      const remaining = Math.max(0, total - dep);
+
+      const message = `Merhaba Sayın *${ord.fullName}*,\n\nPerde siparişinizin güncel durumu: *${ord.status}*.\n${
+        ord.deliveryDate ? `Planlanan Teslimat Tarihi: *${formatDateTR(ord.deliveryDate)}*\n` : ''
+      }${remaining > 0 ? `Kalan Bakiye: *${formatCurrency(remaining)}*\n` : ''}\nBizi tercih ettiğiniz için teşekkür ederiz.`;
+
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    };
+
+    window.exportToCSV = () => {
+      const filtered = getFilteredOrders();
+      const headers = ['Ad Soyad', 'Telefon', 'Sipariş Tarihi', 'Teslimat Tarihi', 'Sipariş Durumu', 'Toplam Tutar', 'Alınan Para', 'Kalan Bakiye', 'Adres', 'Notlar'];
+      const rows = filtered.map((o) => {
+        const total = Number(o.totalAmount) || 0;
+        const dep = Number(o.depositAmount) || 0;
+        const rem = Math.max(0, total - dep);
+        return [
+          `"${o.fullName || ''}"`,
+          `"${o.phone || ''}"`,
+          `"${formatDateTR(o.orderDate)}"`,
+          `"${formatDateTR(o.deliveryDate)}"`,
+          `"${o.status || ''}"`,
+          total,
+          dep,
+          rem,
+          `"${(o.address || '').replace(/"/g, '""')}"`,
+          `"${(o.notes || '').replace(/"/g, '""')}"`
+        ].join(';');
+      });
+
+      const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Musteri_Siparis_Listesi_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      showToast('Excel (CSV) dosyası indirildi.');
+    };
+
+    window.lockScreen = () => {
+      document.getElementById('appScreen').classList.add('hidden');
+      const login = document.getElementById('loginScreen');
+      login.classList.remove('hidden');
+      login.classList.add('flex');
+    };
+
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass = document.getElementById('loginPassword').value.trim();
+      if (!email || !pass) {
+        document.getElementById('loginError').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('loginError').classList.add('hidden');
+      const login = document.getElementById('loginScreen');
+      login.classList.add('hidden');
+      login.classList.remove('flex');
+      document.getElementById('appScreen').classList.remove('hidden');
+      showToast('Sisteme giriş yapıldı.');
+    });
+
+    window.onload = () => {
+      lucide.createIcons();
+      initFirebase();
+    };
+  </script>
+</body>
+</html>
