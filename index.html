@@ -120,6 +120,16 @@
 
         <div class="flex items-center gap-2 sm:gap-2.5">
           <button
+            onclick="openCloudModal()"
+            id="btnCloudStatus"
+            class="bg-white/15 hover:bg-white/25 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition cursor-pointer"
+            title="Cihazlar Arası Ortak Bulut Senkronizasyonu ve Yedekleme"
+          >
+            <span id="cloudDot" class="w-2 h-2 rounded-full bg-emerald-300"></span>
+            <span id="cloudStatusText" class="hidden md:inline">Cihaz Hafızası Aktif</span>
+          </button>
+
+          <button
             onclick="openNewOrderModal()"
             class="bg-white text-[#43614f] hover:bg-emerald-50 font-bold px-3.5 py-2 rounded-lg text-xs sm:text-sm shadow-sm flex items-center gap-1.5 transition cursor-pointer"
           >
@@ -489,6 +499,59 @@
     </div>
   </div>
 
+  <!-- MODAL 5: BULUT SENKRONİZASYONU VE VERİ YEDEKLEME -->
+  <div id="cloudModal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-xs items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+      <div class="px-6 py-4 bg-[#52735f] text-white flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-base sm:text-lg">Kayıt Hafızası & Ortak Bulut Ayarı</h3>
+          <p class="text-xs text-emerald-100">Verileriniz artık cihazınızda otomatik ve kalıcı olarak saklanır</p>
+        </div>
+        <button onclick="closeCloudModal()" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-5 text-xs sm:text-sm text-slate-700">
+        <!-- Yedek İndir / Yükle -->
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-800">1. Hızlı Yedekleme (Dosya ile Cihazlar Arası Aktarım)</div>
+          <p class="text-xs text-slate-500">
+            Mevcut tüm müşterilerinizi tek tıkla yedek dosyası olarak indirebilir veya başka bir cihazdan aldığınız yedeği buraya yükleyebilirsiniz.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="downloadBackupJSON()" class="px-3.5 py-2 rounded-lg bg-[#52735f] hover:bg-[#415c4c] text-white text-xs font-semibold cursor-pointer">
+              Yedeği İndir (.json)
+            </button>
+            <label class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer">
+              <span>Yedek Dosyası Yükle</span>
+              <input type="file" accept=".json" onchange="restoreBackupJSON(event)" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Ortak Firebase Veritabanı -->
+        <div class="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-3">
+          <div class="font-bold text-[#466353]">2. Telefon ve Bilgisayar Anlık Senkronizasyon (İsteğe Bağlı)</div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Telefondan girdiğiniz müşterinin aynı saniyede bilgisayarda da görünmesi için ücretsiz bir <strong>Firebase Realtime Database URL</strong> adresi girebilirsiniz (Örn: <code>https://proje-adiniz-default-rtdb.firebaseio.com</code>). Boş bırakırsanız verileriniz bu cihazın hafızasında kalıcı olarak tutulmaya devam eder.
+          </p>
+          <input
+            type="url"
+            id="firebaseDbUrlInput"
+            placeholder="https://perde-takip-default-rtdb.firebaseio.com"
+            class="w-full px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#52735f]"
+          />
+          <div class="flex justify-end gap-2">
+            <button onclick="saveCloudConfig()" class="px-4 py-2 rounded-lg bg-[#52735f] hover:bg-[#415c4c] text-white text-xs font-bold cursor-pointer">
+              Kaydet ve Bağlan
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- FIREBASE VE UYGULAMA MANTIĞI -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -507,6 +570,9 @@
     const CURTAIN_TYPES = ['Tül Perde', 'Fon Perde', 'Stor Perde', 'Zebra Perde', 'Güneşlik', 'Jaluzi', 'Dikey Perde', 'Plise Perde', 'Rustik / Korniş'];
     const PLEAT_TYPES = ['1x3 Sık Pile', '1x2.5 Orta Pile', '1x2 Seyrek Pile', 'Kruvaze', 'Pilesiz / Düz', 'Standart Mekanizma'];
 
+    const LOCAL_STORAGE_KEY = 'perde_crm_kalici_siparisler_v1';
+    const CLOUD_URL_KEY = 'perde_crm_firebase_rtdb_url';
+
     // State
     let orders = [];
     let currentStatusFilter = 'Tümü';
@@ -517,10 +583,100 @@
     let db = null;
     let auth = null;
     let currentUser = null;
+    let customCloudUrl = localStorage.getItem(CLOUD_URL_KEY) || '';
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'perde-siparis-takip-crm';
 
-    // Firebase Başlatma
-    async function initFirebase() {
+    // 1. Cihazın Kalıcı Hafızasından (localStorage) Yükle & Kaydet
+    function loadFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            orders = parsed;
+            orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          }
+        }
+      } catch (e) {
+        console.error("Yerel hafıza okuma hatası:", e);
+      }
+    }
+
+    function saveToLocalStorage() {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(orders));
+      } catch (e) {
+        console.error("Yerel hafıza yazma hatası:", e);
+      }
+    }
+
+    // 2. Özel Bulut URL (Firebase RTDB REST) Senkronizasyonu
+    async function syncFromCustomCloud() {
+      if (!customCloudUrl) return;
+      try {
+        const cleanUrl = customCloudUrl.replace(/\/$/, '');
+        const res = await fetch(`${cleanUrl}/orders.json`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object') {
+            orders = Object.values(data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            saveToLocalStorage();
+            renderAll();
+          } else if (data === null) {
+            orders = [];
+            saveToLocalStorage();
+            renderAll();
+          }
+          updateCloudBadge(true);
+        }
+      } catch (e) {
+        console.error("Bulut senkronizasyon hatası:", e);
+      }
+    }
+
+    async function pushToCustomCloud() {
+      saveToLocalStorage();
+      if (!customCloudUrl) return;
+      try {
+        const cleanUrl = customCloudUrl.replace(/\/$/, '');
+        const mapObj = {};
+        orders.forEach((o) => {
+          mapObj[o.id] = o;
+        });
+        await fetch(`${cleanUrl}/orders.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mapObj)
+        });
+        updateCloudBadge(true);
+      } catch (e) {
+        console.error("Bulut yazma hatası:", e);
+      }
+    }
+
+    function updateCloudBadge(isCloudConnected) {
+      const txt = document.getElementById('cloudStatusText');
+      const dot = document.getElementById('cloudDot');
+      if (isCloudConnected) {
+        txt.textContent = 'Ortak Bulut Aktif';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-300 animate-pulse';
+      } else {
+        txt.textContent = 'Cihaz Hafızası Aktif';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-300';
+      }
+    }
+
+    // 3. Başlatma (Önce Yerel Hafıza, Varsa Bulut)
+    async function initStorage() {
+      loadFromLocalStorage();
+      renderAll();
+
+      if (customCloudUrl) {
+        await syncFromCustomCloud();
+        setInterval(syncFromCustomCloud, 8000);
+        return;
+      }
+
       try {
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
           const firebaseConfig = JSON.parse(__firebase_config);
@@ -543,6 +699,7 @@
                 (snapshot) => {
                   orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
                   orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                  saveToLocalStorage();
                   renderAll();
                 },
                 (err) => {
@@ -552,12 +709,9 @@
               );
             }
           });
-        } else {
-          renderAll();
         }
       } catch (e) {
         console.error("Başlatma hatası:", e);
-        renderAll();
       }
     }
 
@@ -1043,7 +1197,7 @@
       };
 
       try {
-        if (db && currentUser) {
+        if (db && currentUser && !customCloudUrl) {
           if (editingOrderId) {
             const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', editingOrderId);
             await updateDoc(ref, payload);
@@ -1057,10 +1211,12 @@
           if (editingOrderId) {
             orders = orders.map((o) => (o.id === editingOrderId ? { ...o, ...payload } : o));
           } else {
-            orders.unshift({ id: crypto.randomUUID(), ...payload, createdAt: Date.now() });
+            const newId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'ord_' + Date.now();
+            orders.unshift({ id: newId, ...payload, createdAt: Date.now() });
           }
+          await pushToCustomCloud();
           renderAll();
-          showToast('Sipariş kaydedildi.');
+          showToast('Sipariş kalıcı olarak kaydedildi.');
         }
         window.closeOrderFormModal();
       } catch (err) {
@@ -1071,11 +1227,12 @@
 
     window.quickStatusChange = async (id, newStatus) => {
       try {
-        if (db && currentUser) {
+        if (db && currentUser && !customCloudUrl) {
           const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', id);
           await updateDoc(ref, { status: newStatus });
         } else {
           orders = orders.map((o) => (o.id === id ? { ...o, status: newStatus } : o));
+          await pushToCustomCloud();
           renderAll();
         }
         showToast(`Sipariş durumu "${newStatus}" olarak güncellendi.`);
@@ -1203,11 +1360,12 @@
     window.confirmDeleteOrder = async () => {
       if (!deletingOrderId) return;
       try {
-        if (db && currentUser) {
+        if (db && currentUser && !customCloudUrl) {
           const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', deletingOrderId);
           await deleteDoc(ref);
         } else {
           orders = orders.filter((o) => o.id !== deletingOrderId);
+          await pushToCustomCloud();
           renderAll();
         }
         showToast('Müşteri kaydı silindi.');
@@ -1231,13 +1389,14 @@
 
     window.confirmClearAllOrders = async () => {
       try {
-        if (db && currentUser) {
+        if (db && currentUser && !customCloudUrl) {
           for (const ord of orders) {
             const ref = doc(db, 'artifacts', appId, 'public', 'data', 'curtain_orders', ord.id);
             await deleteDoc(ref);
           }
         } else {
           orders = [];
+          await pushToCustomCloud();
           renderAll();
         }
         window.closeClearAllModal();
@@ -1245,6 +1404,67 @@
       } catch (e) {
         console.error(e);
       }
+    };
+
+    // Bulut & Yedekleme Modal Fonksiyonları
+    window.openCloudModal = () => {
+      document.getElementById('firebaseDbUrlInput').value = customCloudUrl;
+      const modal = document.getElementById('cloudModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeCloudModal = () => {
+      const modal = document.getElementById('cloudModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.saveCloudConfig = async () => {
+      const val = document.getElementById('firebaseDbUrlInput').value.trim();
+      customCloudUrl = val;
+      if (val) {
+        localStorage.setItem(CLOUD_URL_KEY, val);
+        await pushToCustomCloud();
+        await syncFromCustomCloud();
+        showToast('Ortak bulut bağlantısı kaydedildi ve senkronize edildi.');
+      } else {
+        localStorage.removeItem(CLOUD_URL_KEY);
+        updateCloudBadge(false);
+        showToast('Cihaz hafızası moduna geçildi.');
+      }
+      window.closeCloudModal();
+    };
+
+    window.downloadBackupJSON = () => {
+      const dataStr = JSON.stringify(orders, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Perde_CRM_Yedek_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      showToast('Yedek dosyası indirildi.');
+    };
+
+    window.restoreBackupJSON = (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            orders = imported;
+            await pushToCustomCloud();
+            renderAll();
+            window.closeCloudModal();
+            showToast(`${imported.length} müşteri kaydı başarıyla yüklendi.`);
+          }
+        } catch (err) {
+          showToast('Geçersiz yedek dosyası.');
+        }
+      };
+      reader.readAsText(file);
     };
 
     window.openWhatsApp = (id) => {
@@ -1323,7 +1543,7 @@
 
     window.onload = () => {
       lucide.createIcons();
-      initFirebase();
+      initStorage();
     };
   </script>
 </body>
